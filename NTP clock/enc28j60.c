@@ -62,7 +62,7 @@ static uint8_t spiTransfer(uint8_t data)
 	return data;
 }
 
-static uint8_t enc28j60ReadOpNew(uint8_t opAddr)
+static uint8_t enc28j60ReadOp(uint8_t opAddr)
 {
 	// assert CS
     CS_LO;
@@ -83,9 +83,7 @@ static uint8_t enc28j60ReadOpNew(uint8_t opAddr)
     return data;
 }
 
-#define enc28j60ReadOp(op, address) enc28j60ReadOpNew((op) | (address))
-
-static void enc28j60WriteOpNew(uint8_t opAddr, uint8_t data)
+static void enc28j60WriteOp(uint8_t opAddr, uint8_t data)
 {
     // assert CS
     CS_LO;
@@ -99,7 +97,11 @@ static void enc28j60WriteOpNew(uint8_t opAddr, uint8_t data)
     CS_HI;
 }
 
-#define enc28j60WriteOp(op, address, data) enc28j60WriteOpNew((op) | ((address) & ADDR_MASK), data)
+#define enc28j60Read(address) enc28j60ReadOp(ENC28J60_READ_CTRL_REG | (address))
+
+#define enc28j60Write(address, data) enc28j60WriteOp(ENC28J60_WRITE_CTRL_REG | ((address) & ADDR_MASK), (data))
+#define enc28j60BitFieldSet(address, data) enc28j60WriteOp(ENC28J60_BIT_FIELD_SET | ((address) & ADDR_MASK), (data))
+#define enc28j60BitFieldClr(address, data) enc28j60WriteOp(ENC28J60_BIT_FIELD_CLR | ((address) & ADDR_MASK), (data))
 
 static void enc28j60SetBank(uint8_t address)
 {
@@ -107,8 +109,8 @@ static void enc28j60SetBank(uint8_t address)
     //if((address & BANK_MASK) != Enc28j60Bank)
     //{
         // set the bank
-        enc28j60WriteOp(ENC28J60_BIT_FIELD_CLR, ECON1, (ECON1_BSEL1|ECON1_BSEL0));
-        enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, ECON1, address);//(address & BANK_MASK)>>5); // ToDo: optimize shift
+        enc28j60BitFieldClr(ECON1, (ECON1_BSEL1|ECON1_BSEL0));
+        enc28j60BitFieldSet(ECON1, address);//(address & BANK_MASK)>>5); // ToDo: optimize shift
     //    Enc28j60Bank = (address & BANK_MASK);
     //}
 }
@@ -119,19 +121,15 @@ static void enc28j60SetBank(uint8_t address)
     enc28j60SetBank(address);
     // do the read
     return enc28j60ReadOp(ENC28J60_READ_CTRL_REG, address);
-}*/
+}
 
-#define enc28j60Read(address) enc28j60ReadOp(ENC28J60_READ_CTRL_REG, address)
-
-/*static void enc28j60Write(uint8_t address, uint8_t data)
+static void enc28j60Write(uint8_t address, uint8_t data)
 {
     // set the bank
     enc28j60SetBank(address);
     // do the write
     enc28j60WriteOp(ENC28J60_WRITE_CTRL_REG, address, data);
 }*/
-
-#define enc28j60Write(address, data) enc28j60WriteOp(ENC28J60_WRITE_CTRL_REG, (address), (data))
 
 // ToDo: inline
 static uint8_t enc28j60PhyReadL(uint8_t address)
@@ -246,9 +244,9 @@ void enc28j60Init()
     //enc28j60SetBank(ECON1);
 	// ToDo: disable interrupts?
     // enable interrutps
-    enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE|EIE_PKTIE);
+    enc28j60BitFieldSet(EIE, EIE_INTIE|EIE_PKTIE);
     // enable packet reception
-    enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, ECON1, ECON1_RXEN);
+    enc28j60BitFieldSet(ECON1, ECON1_RXEN);
 }
 
 void enc28j60WriteMac(uint8_t* myMac)
@@ -261,7 +259,7 @@ void enc28j60WriteMac(uint8_t* myMac)
 	//uint8_t* ptr = myMac+6;
 	for (uint8_t c = ENC28J60_WRITE_CTRL_REG | ((MAADR1 + 5) & ADDR_MASK); c >= (ENC28J60_WRITE_CTRL_REG | (MAADR1 & ADDR_MASK)); c--)
 	{
-		enc28j60WriteOpNew(c ^ 1, LD_Y(myMac));
+		enc28j60WriteOp(c ^ 1, LD_Y(myMac));
 	}
 }
 
@@ -418,7 +416,6 @@ uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr)//uint16_t maxlen, uint8_t* 
 	// issue read command
 	spiTransfer(ENC28J60_READ_BUF_MEM);
 
-	#define enc28j60ReadByte() spiTransfer(0)
 	// read the next packet pointer
 	*NextPacketPtr = spiTransferWord();
 	//NextPacketPtr  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
@@ -430,11 +427,10 @@ uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr)//uint16_t maxlen, uint8_t* 
 	// remove the CRC count
 	//len -= 4;
 	// read the receive status
-	rxstat = enc28j60ReadByte();
-	enc28j60ReadByte();
+	rxstat = spiTransfer(0);
+	spiTransfer(0);
 	//rxstat  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
 	//rxstat |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
-	#undef enc28j60ReadByte
 
 	// limit retrieve length
 	//if (len > maxlen)
@@ -476,7 +472,7 @@ void enc28j60EndRead(uint16_t* NextPacketPtr)
 	}
 
 	// decrement the packet counter indicate we are done with this packet
-	enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, ECON2, ECON2_PKTDEC);
+	enc28j60BitFieldSet(ECON2, ECON2_PKTDEC);
 
 	tx('\r');
 	tx('\n');
@@ -496,9 +492,10 @@ void enc28j60WritePacket(uint16_t len)
 	while (enc28j60Read(ECON1) & ECON1_TXRTS)
 	{
 		// Reset the transmit logic problem. See Rev. B4 Silicon Errata point 12.
-		if( (enc28j60Read(EIR) & EIR_TXERIF) ) {
-			enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRST);
-			enc28j60WriteOp(ENC28J60_BIT_FIELD_CLR, ECON1, ECON1_TXRST);
+		if ((enc28j60Read(EIR) & EIR_TXERIF))
+		{
+			enc28j60BitFieldSet(ECON1, ECON1_TXRST);
+			enc28j60BitFieldClr(ECON1, ECON1_TXRST);
 		}
 	}
 
@@ -531,13 +528,12 @@ void enc28j60EndWrite()
 	CS_HI;
 
 	// send the contents of the transmit buffer onto the network
-	enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, ECON1, ECON1_TXRTS);
+	enc28j60BitFieldSet(ECON1, ECON1_TXRTS);
 	
 	tx('\r');
 	tx('\n');
 }
 
-// ToDo: use the latching version
 uint8_t enc28j60LinkUp()
 {
 	// PHSTAT1 LLSTAT (= bit 2 in lower reg), PHSTAT1_LLSTAT
