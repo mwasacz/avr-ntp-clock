@@ -23,9 +23,10 @@
 //extern void sendDhcpDiscover(uint32_t id);
 //extern void sendDhcpRequest(uint32_t id, uint8_t* reqIp, uint8_t* serverId);
 extern void loop(uint8_t* state, uint16_t* NextPacketPtr);
+extern void init();
 //extern void tick();
 
-extern uint8_t net[56];
+extern uint8_t net[64];
 extern uint32_t time;
 extern uint8_t tim;
 extern uint16_t cnt;

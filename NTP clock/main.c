@@ -222,8 +222,8 @@ static void eepromRead()
 {
 	while (EECR & (1<<EEWE));
 
-	uint16_t c = 10;
-	uint8_t* ptr = net+18+10;
+	uint16_t c = 18;
+	uint8_t* ptr = net+18 + 18;
 	do
 	{
 		EEAR = --c;
@@ -301,6 +301,7 @@ int main(void)
 
 	while (1)
 	{
+	init();
 	enc28j60Init();
 	enc28j60WriteMac(net+18+6); // Do in enc28j60Init
 

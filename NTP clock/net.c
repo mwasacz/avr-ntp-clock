@@ -24,7 +24,7 @@
 
 // ToDo: merge into one array and pass uint8_t instead of uint8_t*
 
-uint8_t net[56]/* = {
+uint8_t net[64]/* = {
 0,0,0,0,0,0,
 0,0,0,0,0,0,
 0,0,0,0,0,0,
@@ -44,13 +44,15 @@ MAC5,MAC4,MAC3,MAC2,MAC1,MAC0,
 #define dstMac		net+12
 #define myMac		net+18
 #define dstIp		net+24
-#define myIp		net+28
-#define gwIp		net+32
-#define netmask		net+36
-#define serverId	net+40
-#define arpIp		net+44
-#define arpReplyIp	net+48
-#define xid			net+52
+#define myIpInit	net+28
+#define gwIpInit	net+32
+#define myIp		net+36
+#define gwIp		net+40
+#define netmask		net+44
+#define serverId	net+48
+#define arpIp		net+52
+#define arpReplyIp	net+56
+#define xid			net+60
 
 //uint8_t myMac[6] = {MAC5,MAC4,MAC3,MAC2,MAC1,MAC0};
 //static uint8_t dstIp[4] = {104,5,168,192};//{17,4,130,134}
@@ -353,16 +355,10 @@ static void sendNtpPacket(uint8_t state)
 	sei();
 	tim = 2;
 	
-	uint8_t f = tcnt / CONST16(245);
-	net[1] = f;
+	uint16_t f = ((uint32_t)tcnt << 16) / CONST16(62500);
+	net[0] = L(f);
+	net[1] = H(f);
 	uint16_t sum = CONST16(IP_PROTO_UDP_V + 48 + UDP_HEADER_LEN + 123 + 123 + 48 + UDP_HEADER_LEN + 0x2300);
-
-	//asm (
-	//	"add %B0, %1 \n"
-	//	"adc %A0, __zero_reg__ \n"
-	//	: "+r" (sum)
-	//	: "r" (f)
-	//);
 
 	sum = addrChecksum(sum, myIp+4);
 	sum = addrChecksum(sum, dstIp+4);
@@ -771,13 +767,14 @@ static void receiveNtpPacket(uint16_t len, uint8_t* state)
 	
 
 	cli();
-	uint8_t f = TCNT1 / CONST16(245);
+	uint16_t tcnt = TCNT1;
 
+	uint8_t x5;
 	uint8_t x4;
 	uint8_t x3;
 	uint8_t x2;
 	uint8_t x1;
-	uint8_t x0 = f;
+	uint8_t x0;
 	
 	uint8_t* ptr;// = (uint8_t*)&time;
 	asm volatile (
@@ -790,33 +787,40 @@ static void receiveNtpPacket(uint16_t len, uint8_t* state)
 		"ld %1, %a4+ \n"
 		"ld %2, %a4+ \n"
 		"ld %3, %a4+ \n"
-		: "=r" (x1), "=r" (x2), "=r" (x3), "=r" (x4), "+e" (ptr)
+		: "=r" (x2), "=r" (x3), "=r" (x4), "=r" (x5), "+e" (ptr)
 	);
 	sei();
 
+	uint16_t f = ((uint32_t)tcnt << 16) / CONST16(62500);
+	x0 = L(f);
+	x1 = H(f);
+
 	//ptr = timestamp;
 	asm volatile (
-		"ldi %A0, lo8(net+1) \n"
-		"ldi %B0, hi8(net+1) \n"
+		"ldi %A0, lo8(net+0) \n"
+		"ldi %B0, hi8(net+0) \n"
 		: "=d"(ptr)
 	);
 	uint8_t temp;
 	
-	// (x4,x3,x2,x1,x0) -= (timestamp[4], timestamp[3], timestamp[2], timestamp[1], timestamp[0]);
+	// (x5,x4,x3,x2,x1,x0) -= (timestamp[5], timestamp[4], timestamp[3], timestamp[2], timestamp[1], timestamp[0]);
 	asm (
-		"ld %6, %a5+ \n"
-		"sub %0, %6 \n"
-		"ld %6, %a5+ \n"
-		"sbc %1, %6 \n"
-		"ld %6, %a5+ \n"
-		"sbc %2, %6 \n"
-		"ld %6, %a5+ \n"
-		"sbc %3, %6 \n"
-		"ld %6, %a5+ \n"
-		"sbc %4, %6 \n"
-		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+e" (ptr), "=r" (temp)
+		"ld %7, %a6+ \n"
+		"sub %0, %7 \n"
+		"ld %7, %a6+ \n"
+		"sbc %1, %7 \n"
+		"ld %7, %a6+ \n"
+		"sbc %2, %7 \n"
+		"ld %7, %a6+ \n"
+		"sbc %3, %7 \n"
+		"ld %7, %a6+ \n"
+		"sbc %4, %7 \n"
+		"ld %7, %a6+ \n"
+		"sbc %5, %7 \n"
+		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+r" (x5), "+e" (ptr), "=r" (temp)
 	);
-
+	
+	uint8_t y5 = enc28j60ReadByte();
 	uint8_t y4 = enc28j60ReadByte();
 	uint8_t y3 = enc28j60ReadByte();
 	uint8_t y2 = enc28j60ReadByte();
@@ -825,42 +829,55 @@ static void receiveNtpPacket(uint16_t len, uint8_t* state)
 	
 	// (c,t,f) += (x4,x3,x2,x1,x0);
 	asm (
-		"add %0, %5 \n"
-		"adc %1, %6 \n"
-		"adc %2, %7 \n"
-		"adc %3, %8 \n"
-		"adc %4, %9 \n"
-		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4)
-		: "r" (y0), "r" (y1), "r" (y2), "r" (y3), "r" (y4)
+		"add %0, %6 \n"
+		"adc %1, %7 \n"
+		"adc %2, %8 \n"
+		"adc %3, %9 \n"
+		"adc %4, %10 \n"
+		"adc %5, %11 \n"
+		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+r" (x5)
+		: "r" (y0), "r" (y1), "r" (y2), "r" (y3), "r" (y4), "r" (y5)
 	);
 	
-	skipBytes(3);
+	skipBytes(2);
 	
+	y5 = enc28j60ReadByte();
 	y4 = enc28j60ReadByte();
 	y3 = enc28j60ReadByte();
 	y2 = enc28j60ReadByte();
 	y1 = enc28j60ReadByte();
 	y0 = enc28j60ReadByte();
-	skipBytes(3); // ToDo: remove
+	skipBytes(2); // ToDo: remove
 	
 	// (c,t,f) += (x4,x3,x2,x1,x0);
 	// (c,t,f) >>= 1;
 	asm (
-		"add %0, %5 \n"
-		"adc %1, %6 \n"
-		"adc %2, %7 \n"
-		"adc %3, %8 \n"
-		"adc %4, %9 \n"
+		"add %0, %6 \n"
+		"adc %1, %7 \n"
+		"adc %2, %8 \n"
+		"adc %3, %9 \n"
+		"adc %4, %10 \n"
+		"adc %5, %11 \n"
+		"ror %5 \n"
 		"ror %4 \n"
 		"ror %3 \n"
 		"ror %2 \n"
 		"ror %1 \n"
 		"ror %0 \n"
-		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4)
-		: "r" (y0), "r" (y1), "r" (y2), "r" (y3), "r" (y4)
+		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+r" (x5)
+		: "r" (y0), "r" (y1), "r" (y2), "r" (y3), "r" (y4), "r" (y5)
 	);
 	
-	uint16_t mres = CONST16(245);
+	uint16_t mres;
+	{
+		u16 m = {0};
+		m.b[0] = x0;
+		m.b[1] = x1;
+		mres = m.w;
+	}
+	mres = (uint32_t)(mres * 62500) >> 16;
+
+	/*uint16_t mres = CONST16(245);
 	uint8_t mcnt = 8;
 
 	// mres *= f;
@@ -876,7 +893,7 @@ static void receiveNtpPacket(uint16_t len, uint8_t* state)
 		"brne m1 \n"
 		: "+r" (mres)
 		: "r" (x0), "r" (mcnt)
-	);
+	);*/
 	
 	cli();// ToDo
 	//TIMSK |= (1<<OCIE1A) | (1<<OCIE1B);
@@ -897,7 +914,7 @@ static void receiveNtpPacket(uint16_t len, uint8_t* state)
 		"st %a0+, %3 \n"
 		"st %a0+, %4 \n"
 		: "+e" (ptr)
-		: "r" (x1), "r" (x2), "r" (x3), "r" (x4)
+		: "r" (x2), "r" (x3), "r" (x4), "r" (x5)
 	);
 
 	flag |= TIME_OK;
@@ -1061,6 +1078,12 @@ void loop(uint8_t* state, uint16_t* NextPacketPtr)
 
 	sendPacket(*state); // ToDo: deal with buffer overflow !!!
 	flag &= ~ARP_REPLY;
+}
+
+void init()
+{
+	copyAddr(myIp, myIpInit);
+	copyAddr(gwIp, gwIpInit);
 }
 
 /*void tick()
