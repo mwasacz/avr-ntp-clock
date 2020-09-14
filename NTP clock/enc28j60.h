@@ -266,7 +266,7 @@ extern uint8_t enc28j60PacketReceived();
 extern uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr);
 extern uint8_t enc28j60ReadByte();
 extern void enc28j60EndRead(uint16_t* NextPacketPtr);
-extern void enc28j60WritePacket(uint16_t len);
+extern void enc28j60WritePacket(uint16_t txnd);//len);
 extern void enc28j60WriteByte(uint8_t data);
 extern void enc28j60EndWrite();
 

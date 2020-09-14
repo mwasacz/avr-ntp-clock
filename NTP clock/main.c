@@ -28,7 +28,7 @@
  *	FONT DEFINITION														*
  *----------------------------------------------------------------------*/
 
-const uint8_t font[] PROGMEM = {
+const __flash uint8_t font[] = {
 	0xC0,	// 0
 	0xF9,	// 1
 	0xA4,	// 2
@@ -56,6 +56,8 @@ static uint8_t disp[24] = {0,0, 0,0, 0,0,  6,10, 1,0, 1,0,  0,10, 0,0,0,2, 0,0,0
 #define state disp[12]
 
 static uint8_t page = 0;//12;
+
+//static volatile uint8_t dig[5] = {1,1,1,1,1};
 
 #define flag TWAR
 #define TIME_OK (1<<1)
@@ -86,6 +88,21 @@ static uint8_t page = 0;//12;
 		x = mon - 1;
 		return 30 + (x & 1);
 	}
+}*/
+
+/*static void test()
+{
+	uint8_t year = dig[4];
+	uint16_t days = (uint16_t)year * 365;
+	days += (uint8_t)(year + 3) >> 2;
+	days += ((uint16_t)dig[3] * 367 - 362) / 12; // ToDo
+	days += dig[2];
+	uint32_t hours = (uint32_t)days * 24;
+	hours += dig[1];
+	uint32_t minutes = (uint32_t)hours * 60;
+	minutes += dig[0];
+	TCNT1 = minutes;
+	TCNT1 = minutes >> 16;
 }*/
 
 static uint8_t isDst(uint8_t day, uint8_t monthL, uint8_t dow, uint8_t hour)
@@ -252,7 +269,7 @@ static void eepromWrite(uint8_t p, uint8_t val)
 
 //uint8_t ee[10] EEMEM = { MAC5,MAC4,MAC3,MAC2,MAC1,MAC0, 104,5,168,192 };
 
-int main(void)
+int main()
 {
 	//PORTB = (1<<CS);
 
@@ -338,7 +355,7 @@ int main(void)
 		{
 			st = 1;
 			state = 0;
-			tim = 0;
+			retryTime = 0;
 		}
 
 		//while (PIND & (1<<LED)); // ToDo: test buffer overflow
@@ -435,6 +452,7 @@ int main(void)
 						dig3++;
 
 					uint8_t x = 9;
+					R_REG(x);
 					if (dig1 == 2)
 						x = 5;
 
@@ -480,23 +498,28 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 {
 	//LED_ON;
 	
-	if (tim)
-		tim--;
+	if (retryTime)
+		retryTime--;
 
-	if (cnt)
-		cnt--;
-	else if (state == 6)
-		state = 4; // ToDo: 4 or 5 ?
+	if (syncTime)
+		syncTime--;
+	else if (state == 6) // ToDo: set flag instead
+		state = 4;
 
 	if (leaseTime)
 		leaseTime--;
-	else if (state > 3)
+	else if (state > 3) // ToDo: set flag instead
 		state = 3;
 
 	if (flag & TIME_OK)
 	{
-		time++;
-		displayTime(time);
+		//test();
+		uint32_t* ptr = &time;
+		E_REG(ptr);
+		uint32_t t = *ptr + 1;
+		*ptr = t;
+		R_REG(t);
+		displayTime(t);
 	}
 }
 
@@ -531,7 +554,7 @@ ISR(TIMER0_OVF_vect)
 	//else
 	//	DISP_PORT = (DISP_PORT & ~(DISP_SEL | DISP_SEG)) | (datetime[x] << 4) | cnt;
 	PORTA = ~(1<<cnt);
-	PORTC = pgm_read_byte(&font[disp[x]]);
+	PORTC = font[disp[x]];
 	cnt++;
 	if (cnt > 5)
 	{

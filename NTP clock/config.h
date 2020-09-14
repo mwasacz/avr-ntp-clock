@@ -10,16 +10,6 @@
 #define CONFIG_H
 
 // ToDo: decide to use UAA or LAA
-//#define MAC0		'N'
-//#define MAC1		'T'
-//#define MAC2		'P'
-//#define MAC3		'c'
-//#define MAC4		'l'
-//#define MAC5		'k'
-
-//#define TRANS_NUM_GWMAC 1
-//#define SOURCE_PORT_H 10//0xF0
-//#define SOURCE_PORT_L 0x28//0x00
 
 #define SPI_PORT	PORTD
 #define SPI_PIN		PIND
@@ -54,10 +44,10 @@
 
 #define H(x) ((x)>>8)
 #define L(x) ((x)&0xFF)
-#define CONST8(val) ({ uint8_t x; asm volatile ("ldi %0, %1 \n" : "=d" (x) : "M" ((val))); x; })
-#define CONST16(val) ({ uint16_t x; asm volatile ("ldi %A0, %1 \n ldi %B0, %2 \n" : "=d" (x) : "M" (L((val))), "M" (H((val)))); x; })
-#define LD_Y(ptr) ({ uint8_t x; asm volatile ("ld %1, -%a0 \n" : "+y" ((ptr)), "=r" (x)); x; })
-#define ST_Y(ptr, val) asm volatile ("st -%a0, %1 \n" : "+y" ((ptr)) : "r" ((val)))
+
+#define R_REG(x) asm ("" : "+r" ((x)));
+#define E_REG(x) asm ("" : "+e" ((x)));
+#define Y_REG(x) asm ("" : "+y" ((x)));
 
 //#define enc28j60ReadWordBE() ({ u16 x = {0}; x.b[1] = enc28j60ReadByte(); x.b[0] = enc28j60ReadByte(); x.w; })
 typedef __uint24 uint24_t;
@@ -66,5 +56,17 @@ typedef union
 	uint16_t w;
 	uint8_t b[2];
 } u16;
+typedef union
+{
+	uint32_t d;
+	uint16_t w[2];
+	uint8_t b[4];
+} u32;
+
+#define WORD(lo, hi) ({ u16 x = {0}; x.b[0] = lo; x.b[1] = hi; x.w; })
+#define DWORD(lo, hi) ({ u32 x = {0}; x.w[0] = lo; x.w[1] = hi; x.d; })
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #endif /* CONFIG_H */

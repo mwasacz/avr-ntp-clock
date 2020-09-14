@@ -28,8 +28,9 @@ extern void init();
 
 extern uint8_t net[64];
 extern uint32_t time;
-extern uint8_t tim;
-extern uint16_t cnt;
+#define retryTime UBRRL
+//extern uint8_t retryTime;
+extern uint16_t syncTime;
 extern uint16_t leaseTime;
 
 #define CRC_LEN 4
@@ -39,22 +40,13 @@ extern uint16_t leaseTime;
 
 // ******* ETH *******
 #define ETH_HEADER_LEN	14
-// values of certain bytes:
-#define ETHTYPE_ARP_H_V 0x08
+#define ETHTYPE_H_V		0x08
 #define ETHTYPE_ARP_L_V 0x06
-#define ETHTYPE_IP_H_V  0x08
 #define ETHTYPE_IP_L_V  0x00
-// byte positions in the ethernet frame:
-//
-// Ethernet type field (2bytes):
-#define ETH_TYPE_H_P 12
-#define ETH_TYPE_L_P 13
-//
-#define ETH_DST_MAC 0
-#define ETH_SRC_MAC 6
 
 
 // ******* ARP *******
+#define ARP_LEN	28
 #define ETH_ARP_OPCODE_REPLY_H_V 0x0
 #define ETH_ARP_OPCODE_REPLY_L_V 0x02
 #define ETH_ARP_OPCODE_REQ_H_V 0x0
@@ -120,5 +112,13 @@ extern uint16_t leaseTime;
 #define UDP_CHECKSUM_H_P 0x28
 #define UDP_CHECKSUM_L_P 0x29
 #define UDP_DATA_P 0x2a
+
+// ******* NTP *******
+#define NTP_LEN	48
+
+// ******* DHCP *******
+#define DHCP_DISCOVER_RENEW_LEN	250
+#define DHCP_REQUEST_LEN	262
+#define DHCP_OFFER_ACK_LEN	255
 
 #endif /* NET_H */
