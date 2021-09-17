@@ -13,36 +13,36 @@
 
 // ToDo: decide to use UAA or LAA
 
-#define SPI_PORT	PORTD
-#define SPI_PIN		PIND
-#define SPI_SO		5
-#define SPI_SI		4
-#define SPI_SCK		6
+#define SPI_PORT    PORTD
+#define SPI_PIN     PIND
+#define SPI_SO      5
+#define SPI_SI      4
+#define SPI_SCK     6
 
-#define CS_PORT		PORTD//PORTB
-#define CS			7//3
+#define CS_PORT     PORTD//PORTB
+#define CS          7//3
 
-#define DISP_PORT	PORTB
-#define DISP_SEL	0x07
-#define DISP_SEG	0xF0
+#define DISP_PORT   PORTB
+#define DISP_SEL    0x07
+#define DISP_SEG    0xF0
 
-#define LED_PORT	PORTD
-#define LED			0
-#define LED_ON		LED_PORT &= ~(1<<LED)
-#define LED_OFF		LED_PORT |= (1<<LED)
-#define LED_ISOFF	LED_PORT & (1<<LED)
+#define LED_PORT    PORTD
+#define LED         0
+#define LED_ON      LED_PORT &= ~(1<<LED)
+#define LED_OFF     LED_PORT |= (1<<LED)
+#define LED_ISOFF   LED_PORT & (1<<LED)
 
-#define SW_PORT		PORTD
-#define SW_PIN		PIND
-#define SW_1		2
-#define SW_2		3
-#define SW_1_ISON	!(SW_PIN & (1<<SW_1))
-#define SW_2_ISON	!(SW_PIN & (1<<SW_2))
+#define SW_PORT     PORTD
+#define SW_PIN      PIND
+#define SW_1        2
+#define SW_2        3
+#define SW_1_ISON   !(SW_PIN & (1<<SW_1))
+#define SW_2_ISON   !(SW_PIN & (1<<SW_2))
 
-#define VOL_PORT	PORTD
-#define VOL_PIN		PIND
-#define VOL			1
-#define VOL_ISOFF	PIND & (1<<VOL)
+#define VOL_PORT    PORTD
+#define VOL_PIN     PIND
+#define VOL         1
+#define VOL_ISOFF   PIND & (1<<VOL)
 
 #define H(x) ((x)>>8)
 #define L(x) ((x)&0xFF)
@@ -55,14 +55,14 @@
 typedef __uint24 uint24_t;
 typedef union
 {
-	uint16_t w;
-	uint8_t b[2];
+    uint16_t w;
+    uint8_t b[2];
 } u16;
 typedef union
 {
-	uint32_t d;
-	uint16_t w[2];
-	uint8_t b[4];
+    uint32_t d;
+    uint16_t w[2];
+    uint8_t b[4];
 } u32;
 
 // ToDo: simplify these

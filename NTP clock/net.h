@@ -22,24 +22,24 @@ extern void init();
 
 typedef struct
 {
-	uint16_t leaseTime;
-	uint16_t syncTime;
-	uint8_t timestamp[6];
-	uint8_t arpReplyMac[6];
-	uint8_t dstMac[6];
-	uint8_t myMac[6];
-	uint8_t dstIp[4];
-	uint8_t myIpInit[4];
-	uint8_t gwIpInit[4];
-	uint32_t time;
-	uint8_t myIp[4];
-	uint8_t gwIp[4];
-	uint8_t netmask[4];
-	uint8_t serverId[4];
-	uint8_t arpIp[4];
-	uint8_t arpReplyIp[4];
-	uint8_t xid[4];
-	//uint8_t retryTime;
+    uint16_t leaseTime;
+    uint16_t syncTime;
+    uint8_t timestamp[6];
+    uint8_t arpReplyMac[6];
+    uint8_t dstMac[6];
+    uint8_t myMac[6];
+    uint8_t dstIp[4];
+    uint8_t myIpInit[4];
+    uint8_t gwIpInit[4];
+    uint32_t time;
+    uint8_t myIp[4];
+    uint8_t gwIp[4];
+    uint8_t netmask[4];
+    uint8_t serverId[4];
+    uint8_t arpIp[4];
+    uint8_t arpReplyIp[4];
+    uint8_t xid[4];
+    //uint8_t retryTime;
 } net_t;
 
 extern net_t net;
@@ -51,14 +51,14 @@ extern net_t net;
 //           _V = value of a field
 
 // ******* ETH *******
-#define ETH_HEADER_LEN	14
-#define ETHTYPE_H_V		0x08
+#define ETH_HEADER_LEN  14
+#define ETHTYPE_H_V     0x08
 #define ETHTYPE_ARP_L_V 0x06
 #define ETHTYPE_IP_L_V  0x00
 
 
 // ******* ARP *******
-#define ARP_LEN	28
+#define ARP_LEN 28
 #define ETH_ARP_OPCODE_REPLY_H_V 0x0
 #define ETH_ARP_OPCODE_REPLY_L_V 0x02
 #define ETH_ARP_OPCODE_REQ_H_V 0x0
@@ -79,7 +79,7 @@ extern net_t net;
 #define ETH_ARP_DST_IP_P 0x26
 
 // ******* IP *******
-#define IP_HEADER_LEN	20
+#define IP_HEADER_LEN   20
 // ip.src
 #define IP_SRC_P 0x1a
 #define IP_DST_P 0x1e
@@ -112,7 +112,7 @@ extern net_t net;
 #define ICMP_DATA_P 0x2a
 
 // ******* UDP *******
-#define UDP_HEADER_LEN	8
+#define UDP_HEADER_LEN  8
 //
 #define UDP_SRC_PORT_H_P 0x22
 #define UDP_SRC_PORT_L_P 0x23
@@ -126,11 +126,11 @@ extern net_t net;
 #define UDP_DATA_P 0x2a
 
 // ******* NTP *******
-#define NTP_LEN	48
+#define NTP_LEN 48
 
 // ******* DHCP *******
-#define DHCP_DISCOVER_RENEW_LEN	250
-#define DHCP_REQUEST_LEN	262
-#define DHCP_OFFER_ACK_LEN	255
+#define DHCP_DISCOVER_RENEW_LEN 250
+#define DHCP_REQUEST_LEN    262
+#define DHCP_OFFER_ACK_LEN  255
 
 #endif /* NET_H */
