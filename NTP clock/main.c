@@ -240,7 +240,7 @@ static void eepromRead()
 	while (EECR & (1<<EEWE));
 
 	uint16_t c = 18;
-	uint8_t* ptr = net+18 + 18;
+	uint8_t* ptr = &net.myMac[18];
 	do
 	{
 		EEAR = --c;
@@ -278,8 +278,10 @@ int main()
 
 	PORTA = 0xFF;
 	DDRA  = 0xFF;
-	PORTC = 0xFF;
-	DDRC  = 0xFF;
+	PORTB = 0x0F;
+	DDRB  = 0x0F;
+	//PORTC = 0xFF;
+	//DDRC  = 0xFF;
 
 	PORTD = /*(1<<SPI_SO) |*/ (1<<SW_1) | (1<<SW_2) | (1<<VOL) | (1<<CS) | (1<<LED);
 	
@@ -320,7 +322,7 @@ int main()
 	{
 	init();
 	enc28j60Init();
-	enc28j60WriteMac(net+18+6); // Do in enc28j60Init
+	enc28j60WriteMac(&net.myMac[6]); // Do in enc28j60Init
 
 	uint8_t old;
 	uint16_t NextPacketPtr = RXSTART_INIT;
@@ -413,7 +415,7 @@ int main()
 					newVal *= 10;
 					newVal += dig3;
 
-					uint8_t* ptr = net+18 + addr;
+					uint8_t* ptr = &net.myMac[0] + addr;
 					uint8_t val = *ptr;
 					if (val != newVal)
 					{
@@ -500,24 +502,25 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 	
 	if (retryTime)
 		retryTime--;
+	
+	net_t *ptr = &net;
+	E_REG(ptr);
 
-	if (syncTime)
-		syncTime--;
+	if (ptr->syncTime)
+		ptr->syncTime--;
 	else if (state == 6) // ToDo: set flag instead
 		state = 4;
 
-	if (leaseTime)
-		leaseTime--;
+	if (ptr->leaseTime)
+		ptr->leaseTime--;
 	else if (state > 3) // ToDo: set flag instead
 		state = 3;
 
 	if (flag & TIME_OK)
 	{
 		//test();
-		uint32_t* ptr = &time;
-		E_REG(ptr);
-		uint32_t t = *ptr + 1;
-		*ptr = t;
+		uint32_t t = ptr->time + 1;
+		ptr->time = t;
 		R_REG(t);
 		displayTime(t);
 	}
@@ -553,8 +556,8 @@ ISR(TIMER0_OVF_vect)
 	//	DISP_PORT = (DISP_PORT & ~(DISP_SEL | DISP_SEG));
 	//else
 	//	DISP_PORT = (DISP_PORT & ~(DISP_SEL | DISP_SEG)) | (datetime[x] << 4) | cnt;
-	PORTA = ~(1<<cnt);
-	PORTC = font[disp[x]];
+	PORTB = (~(1<<cnt)) & 0x0F;
+	PORTA = font[disp[x]];
 	cnt++;
 	if (cnt > 5)
 	{

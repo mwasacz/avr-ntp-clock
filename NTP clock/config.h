@@ -9,6 +9,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <inttypes.h>
+
 // ToDo: decide to use UAA or LAA
 
 #define SPI_PORT	PORTD
@@ -63,8 +65,9 @@ typedef union
 	uint8_t b[4];
 } u32;
 
+// ToDo: simplify these
 #define WORD(lo, hi) ({ u16 x = {0}; x.b[0] = lo; x.b[1] = hi; x.w; })
-#define DWORD(lo, hi) ({ u32 x = {0}; x.w[0] = lo; x.w[1] = hi; x.d; })
+#define DWORD(b0, b1, b2, b3) ({ u32 x = {0}; x.b[0] = b0; x.b[1] = b1; x.b[2] = b2; x.b[3] = b3; x.d; })
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

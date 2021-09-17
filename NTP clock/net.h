@@ -16,22 +16,34 @@
 #include "config.h"
 #include "enc28j60.h"
 
-//extern void writeEthPacket(uint16_t len, uint8_t* dstMac, uint8_t ethTypeL);
-//extern void sendArpPacket(uint8_t* myIp, uint8_t* ip);
-//extern void writeIpPacket(uint16_t len, uint8_t* dstMac, uint16_t id, uint8_t protocol, uint8_t* srcIp, uint8_t* dstIp);
-//extern void writeUdpPacket(uint16_t len, uint8_t* dstMac, uint16_t id, uint8_t* srcIp, uint8_t* dstIp, uint16_t srcPort, uint16_t dstPort, uint32_t sum);
-//extern void sendDhcpDiscover(uint32_t id);
-//extern void sendDhcpRequest(uint32_t id, uint8_t* reqIp, uint8_t* serverId);
 extern void loop(uint8_t* state, uint16_t* NextPacketPtr);
 extern void init();
 //extern void tick();
 
-extern uint8_t net[64];
-extern uint32_t time;
-#define retryTime UBRRL
-//extern uint8_t retryTime;
-extern uint16_t syncTime;
-extern uint16_t leaseTime;
+typedef struct
+{
+	uint16_t leaseTime;
+	uint16_t syncTime;
+	uint8_t timestamp[6];
+	uint8_t arpReplyMac[6];
+	uint8_t dstMac[6];
+	uint8_t myMac[6];
+	uint8_t dstIp[4];
+	uint8_t myIpInit[4];
+	uint8_t gwIpInit[4];
+	uint32_t time;
+	uint8_t myIp[4];
+	uint8_t gwIp[4];
+	uint8_t netmask[4];
+	uint8_t serverId[4];
+	uint8_t arpIp[4];
+	uint8_t arpReplyIp[4];
+	uint8_t xid[4];
+	//uint8_t retryTime;
+} net_t;
+
+extern net_t net;
+#define retryTime TWBR
 
 #define CRC_LEN 4
 

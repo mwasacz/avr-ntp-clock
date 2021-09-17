@@ -14,14 +14,7 @@
 #include "config.h"
 
 // ENC28J60 Control Registers
-// Control register definitions are a combination of address,
-// bank number, and Ethernet/MAC/PHY indicator bits.
-// - Register address   (bits 0-4)
-// - Bank number        (bits 5-6)
-// - MAC/PHY indicator  (bit 7)
-#define ADDR_MASK   0x1F
-#define BANK_MASK   0x60
-#define SPRD_MASK   0x80
+
 // All-bank registers
 #define EIE         0x1B
 #define EIR         0x1C
@@ -29,92 +22,92 @@
 #define ECON2       0x1E
 #define ECON1       0x1F
 // Bank 0 registers
-#define ERDPTL      (0x00|0x00)
-#define ERDPTH      (0x01|0x00)
-#define EWRPTL      (0x02|0x00)
-#define EWRPTH      (0x03|0x00)
-#define ETXSTL      (0x04|0x00)
-#define ETXSTH      (0x05|0x00)
-#define ETXNDL      (0x06|0x00)
-#define ETXNDH      (0x07|0x00)
-#define ERXSTL      (0x08|0x00)
-#define ERXSTH      (0x09|0x00)
-#define ERXNDL      (0x0A|0x00)
-#define ERXNDH      (0x0B|0x00)
-#define ERXRDPTL    (0x0C|0x00)
-#define ERXRDPTH    (0x0D|0x00)
-#define ERXWRPTL    (0x0E|0x00)
-#define ERXWRPTH    (0x0F|0x00)
-#define EDMASTL     (0x10|0x00)
-#define EDMASTH     (0x11|0x00)
-#define EDMANDL     (0x12|0x00)
-#define EDMANDH     (0x13|0x00)
-#define EDMADSTL    (0x14|0x00)
-#define EDMADSTH    (0x15|0x00)
-#define EDMACSL     (0x16|0x00)
-#define EDMACSH     (0x17|0x00)
+#define B0_ERDPTL   0x00
+#define B0_ERDPTH   0x01
+#define B0_EWRPTL   0x02
+#define B0_EWRPTH   0x03
+#define B0_ETXSTL   0x04
+#define B0_ETXSTH   0x05
+#define B0_ETXNDL   0x06
+#define B0_ETXNDH   0x07
+#define B0_ERXSTL   0x08
+#define B0_ERXSTH   0x09
+#define B0_ERXNDL   0x0A
+#define B0_ERXNDH   0x0B
+#define B0_ERXRDPTL 0x0C
+#define B0_ERXRDPTH 0x0D
+#define B0_ERXWRPTL 0x0E
+#define B0_ERXWRPTH 0x0F
+#define B0_EDMASTL  0x10
+#define B0_EDMASTH  0x11
+#define B0_EDMANDL  0x12
+#define B0_EDMANDH  0x13
+#define B0_EDMADSTL 0x14
+#define B0_EDMADSTH 0x15
+#define B0_EDMACSL  0x16
+#define B0_EDMACSH  0x17
 // Bank 1 registers
-#define EHT0        (0x00|0x20)
-#define EHT1        (0x01|0x20)
-#define EHT2        (0x02|0x20)
-#define EHT3        (0x03|0x20)
-#define EHT4        (0x04|0x20)
-#define EHT5        (0x05|0x20)
-#define EHT6        (0x06|0x20)
-#define EHT7        (0x07|0x20)
-#define EPMM0       (0x08|0x20)
-#define EPMM1       (0x09|0x20)
-#define EPMM2       (0x0A|0x20)
-#define EPMM3       (0x0B|0x20)
-#define EPMM4       (0x0C|0x20)
-#define EPMM5       (0x0D|0x20)
-#define EPMM6       (0x0E|0x20)
-#define EPMM7       (0x0F|0x20)
-#define EPMCSL      (0x10|0x20)
-#define EPMCSH      (0x11|0x20)
-#define EPMOL       (0x14|0x20)
-#define EPMOH       (0x15|0x20)
-#define EWOLIE      (0x16|0x20)
-#define EWOLIR      (0x17|0x20)
-#define ERXFCON     (0x18|0x20)
-#define EPKTCNT     (0x19|0x20)
+#define B1_EHT0     0x00
+#define B1_EHT1     0x01
+#define B1_EHT2     0x02
+#define B1_EHT3     0x03
+#define B1_EHT4     0x04
+#define B1_EHT5     0x05
+#define B1_EHT6     0x06
+#define B1_EHT7     0x07
+#define B1_EPMM0    0x08
+#define B1_EPMM1    0x09
+#define B1_EPMM2    0x0A
+#define B1_EPMM3    0x0B
+#define B1_EPMM4    0x0C
+#define B1_EPMM5    0x0D
+#define B1_EPMM6    0x0E
+#define B1_EPMM7    0x0F
+#define B1_EPMCSL   0x10
+#define B1_EPMCSH   0x11
+#define B1_EPMOL    0x14
+#define B1_EPMOH    0x15
+#define B1_EWOLIE   0x16
+#define B1_EWOLIR   0x17
+#define B1_ERXFCON  0x18
+#define B1_EPKTCNT  0x19
 // Bank 2 registers
-#define MACON1      (0x00|0x40|0x80)
-#define MACON2      (0x01|0x40|0x80)
-#define MACON3      (0x02|0x40|0x80)
-#define MACON4      (0x03|0x40|0x80)
-#define MABBIPG     (0x04|0x40|0x80)
-#define MAIPGL      (0x06|0x40|0x80)
-#define MAIPGH      (0x07|0x40|0x80)
-#define MACLCON1    (0x08|0x40|0x80)
-#define MACLCON2    (0x09|0x40|0x80)
-#define MAMXFLL     (0x0A|0x40|0x80)
-#define MAMXFLH     (0x0B|0x40|0x80)
-#define MAPHSUP     (0x0D|0x40|0x80)
-#define MICON       (0x11|0x40|0x80)
-#define MICMD       (0x12|0x40|0x80)
-#define MIREGADR    (0x14|0x40|0x80)
-#define MIWRL       (0x16|0x40|0x80)
-#define MIWRH       (0x17|0x40|0x80)
-#define MIRDL       (0x18|0x40|0x80)
-#define MIRDH       (0x19|0x40|0x80)
+#define B2_MACON1   0x00
+#define B2_MACON2   0x01
+#define B2_MACON3   0x02
+#define B2_MACON4   0x03
+#define B2_MABBIPG  0x04
+#define B2_MAIPGL   0x06
+#define B2_MAIPGH   0x07
+#define B2_MACLCON1 0x08
+#define B2_MACLCON2 0x09
+#define B2_MAMXFLL  0x0A
+#define B2_MAMXFLH  0x0B
+#define B2_MAPHSUP  0x0D
+#define B2_MICON    0x11
+#define B2_MICMD    0x12
+#define B2_MIREGADR 0x14
+#define B2_MIWRL    0x16
+#define B2_MIWRH    0x17
+#define B2_MIRDL    0x18
+#define B2_MIRDH    0x19
 // Bank 3 registers
-#define MAADR1      (0x00|0x60|0x80)
-#define MAADR0      (0x01|0x60|0x80)
-#define MAADR3      (0x02|0x60|0x80)
-#define MAADR2      (0x03|0x60|0x80)
-#define MAADR5      (0x04|0x60|0x80)
-#define MAADR4      (0x05|0x60|0x80)
-#define EBSTSD      (0x06|0x60)
-#define EBSTCON     (0x07|0x60)
-#define EBSTCSL     (0x08|0x60)
-#define EBSTCSH     (0x09|0x60)
-#define MISTAT      (0x0A|0x60|0x80)
-#define EREVID      (0x12|0x60)
-#define ECOCON      (0x15|0x60)
-#define EFLOCON     (0x17|0x60)
-#define EPAUSL      (0x18|0x60)
-#define EPAUSH      (0x19|0x60)
+#define B3_MAADR1   0x00
+#define B3_MAADR0   0x01
+#define B3_MAADR3   0x02
+#define B3_MAADR2   0x03
+#define B3_MAADR5   0x04
+#define B3_MAADR4   0x05
+#define B3_EBSTSD   0x06
+#define B3_EBSTCON  0x07
+#define B3_EBSTCSL  0x08
+#define B3_EBSTCSH  0x09
+#define B3_MISTAT   0x0A
+#define B3_EREVID   0x12
+#define B3_ECOCON   0x15
+#define B3_EFLOCON  0x17
+#define B3_EPAUSL   0x18
+#define B3_EPAUSH   0x19
 // PHY registers
 #define PHCON1      0x00
 #define PHSTAT1     0x01
@@ -216,6 +209,18 @@
 #define PHCON2_TXDIS    0x2000
 #define PHCON2_JABBER   0x0400
 #define PHCON2_HDLDIS   0x0100
+// ENC28J60 PHY PHLCON Register Bit Definitions
+#define PHLCON_LACFG3   0x0800
+#define PHLCON_LACFG2   0x0400
+#define PHLCON_LACFG1   0x0200
+#define PHLCON_LACFG0   0x0100
+#define PHLCON_LBCFG3   0x0080
+#define PHLCON_LBCFG2   0x0040
+#define PHLCON_LBCFG1   0x0020
+#define PHLCON_LBCFG0   0x0010
+#define PHLCON_LFRQ1    0x0008
+#define PHLCON_LFRQ0    0x0004
+#define PHLCON_STRCH    0x0002
 
 // ENC28J60 Packet Control Byte Bit Definitions
 #define PKTCTRL_PHUGEEN     0x08
@@ -232,7 +237,7 @@
 #define ENC28J60_BIT_FIELD_CLR  0xA0
 #define ENC28J60_SOFT_RESET     0xFF
 
-// ToDo: verify buffer boundaries and max frame length
+// ToDo: verify buffer boundaries (max transmit length) and max frame length
 // The RXSTART_INIT must be zero. See Rev. B4 Silicon Errata point 5.
 // Buffer boundaries applied to internal 8K ram
 // the entire available packet buffer space is allocated
@@ -250,14 +255,6 @@
 // (note: maximum ethernet frame length would be 1518)
 #define        MAX_FRAMELEN        1500
 
-//extern uint8_t myMac[6];
-
-//extern uint8_t enc28j60ReadOp(uint8_t op, uint8_t address);
-//extern void enc28j60WriteOp(uint8_t op, uint8_t address, uint8_t data);
-//extern void enc28j60SetBank(uint8_t address);
-//extern uint8_t enc28j60Read(uint8_t address);
-//extern void enc28j60Write(uint8_t address, uint8_t data);
-//extern void enc28j60PhyWrite(uint8_t address, uint16_t data);
 extern void enc28j60Init();
 extern void enc28j60WriteMac(uint8_t* myMac);
 extern uint8_t enc28j60LinkUp();
@@ -266,7 +263,7 @@ extern uint8_t enc28j60PacketReceived();
 extern uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr);
 extern uint8_t enc28j60ReadByte();
 extern void enc28j60EndRead(uint16_t* NextPacketPtr);
-extern void enc28j60WritePacket(uint16_t txnd);//len);
+extern void enc28j60WritePacket(uint16_t txnd);
 extern void enc28j60WriteByte(uint8_t data);
 extern void enc28j60EndWrite();
 
