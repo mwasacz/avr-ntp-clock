@@ -22,9 +22,6 @@ net_t net;
 #define netOffset(member) (offsetof(net_t, member) + memberSize(net_t, member))
 
 // ToDo: flag USE_GW instead of arpIp
-#define flag TWAR
-#define ARP_REPLY (1<<0)
-#define TIME_OK (1<<1)
 
 static void writeZeros(uint8_t len)
 {
@@ -246,7 +243,7 @@ static void sendNtpPacket(uint8_t state)
     uint8_t tifr = TIFR;
     copyAddr(netOffset(timestamp), netOffset(time));
     sei();
-    retryTime = 2;
+    //retryTime = 2;
     
     if (tifr & (1<<ICF1))
         tcnt = 62499;
@@ -510,7 +507,7 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
                 R_REG(lease);
                 if (max == 0)
                     lease = WORD(lo, hi);
-                net.leaseTime = lease >> 1;
+                net.leaseTime = 45; // ToDo: lease >> 1;
                 found |= 0x08;
             }
             else if (code == 1 && l == 4)
@@ -538,6 +535,8 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
     if (type == 6)
     {
         *state = 1;
+        net.retryTime = 0;
+        retryCount = 5;
         return;
     }
 
@@ -550,9 +549,9 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
     {
         uint8_t c = 4;
         R_REG(c);
-        uint8_t* pd = net.dstIp;
-        uint8_t* pm = net.myIp;
-        uint8_t* pn = net.netmask;
+        uint8_t* pd = net.dstIp + 4;
+        uint8_t* pm = net.myIp + 4;
+        uint8_t* pn = net.netmask + 4;
         do
         {
             uint8_t d = *--pd;
@@ -567,19 +566,18 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
         } while (--c);
     }
 
-    *state <<= 1;
-    if (*state == 2)
+    if (*state == 1)
     {
         if (type != 2) return;
+        *state = 2;
     }
     else
     {
         if (type != 5) return;
-
-        if (net.syncTime == 0)
-            *state = 4;
+        *state = 6;
     }
-    retryTime = 0;
+    net.retryTime = 0;
+    retryCount = 5;
     copyAddr(netOffset(arpIp), ptr);
 }
 
@@ -694,9 +692,12 @@ static void receiveNtpPacket(uint8_t* state)
     TIFR  = (1<<OCF1A) | (1<<OCF1B) | (1<<ICF1); // ToDo
     sei();
 
-    retryTime = 0;
-    ptr->syncTime = 15;//ToDo: should be 900
+    ptr->syncTime = 20; // ToDo: 3600
     *state = 6;
+    flag &= ~SYNC_ERROR;
+    tx('\r');
+    tx('\n');
+    tx(':');
 }
 
 static void receiveUdpPacket(uint16_t len, uint8_t* state)
@@ -785,13 +786,14 @@ static void receiveArpPacket(uint8_t* state)
 
         flag |= ARP_REPLY;
     }
-    else if (operL == 2 && *state == 4) // ToDo: consider checking target IP, MAC
+    else if (operL == 2 && *state == 4 && retryCount) // ToDo: consider checking target IP, MAC
     {
         readAddr(netOffset(dstMac)); // Sender hardware address
         if (checkAddr(netOffset(arpIp))) return; // Sender protocol address
         
-        retryTime = 0;
         *state = 5;
+        net.retryTime = 0;
+        retryCount = 5;
     }
 }
 
@@ -802,7 +804,7 @@ static void receiveEthPacket(uint16_t len, uint8_t* state)
     // Destination MAC (checked by ENC28J60), Source MAC (checked by ENC28J60), EtherType
     if (readBytes(13) != ETHTYPE_H_V) return;
     uint8_t typeL = enc28j60ReadByte();
-    if (typeL == ETHTYPE_IP_L_V)
+    if (retryCount && typeL == ETHTYPE_IP_L_V)
         receiveIpPacket(len - ETH_HEADER_LEN - CRC_LEN, state);
     else if (*state > 2 && typeL == ETHTYPE_ARP_L_V)
         receiveArpPacket(state);
@@ -819,19 +821,110 @@ void loop(uint8_t* state, uint16_t* NextPacketPtr)
 {
     if (enc28j60PacketReceived()) // ToDo: deal with buffer overflow !!!
         receivePacket(state, NextPacketPtr);
-    if (retryTime == 0 && *state < 6)
-        retryTime = 5;
-    else if (!(flag & ARP_REPLY))
+    
+    uint8_t* ptr = (uint8_t*)&net;
+    E_REG(ptr);
+    // ToDo: atomic access
+    uint8_t retry = *(ptr + netOffset(retryTime) - 1) | *(ptr + netOffset(retryTime) - 2);
+    uint8_t sync = *(ptr + netOffset(syncTime) - 1) | *(ptr + netOffset(syncTime) - 2);
+    uint8_t lease = *(ptr + netOffset(leaseTime) - 1) | *(ptr + netOffset(leaseTime) - 2);
+    
+    if (lease == 0 && *state > 3 && (flag & USE_DHCP))
+    {
+        tx('L');
+        tx('\r');
+        tx('\n');
+        *state = 3;
+        net.retryTime = 0;
+        retryCount = 5;
+    }
+    else if (sync == 0 && *state > 5)
+    {
+        tx('S');
+        tx('\r');
+        tx('\n');
+        *state = 4;
+        net.retryTime = 0;
+        retryCount = 5;
+    }
+    
+    if (sync == 0 && retryCount == 0) // ToDo: relocate this
+    {
+        if (!(flag & SYNC_ERROR))
+        {
+            tx('.');
+            tx('\r');
+            tx('\n');
+        }
+        flag |= SYNC_ERROR;
+    }
+    
+    if (flag & ARP_REPLY)
+    {
+    }
+    else if (retry == 0 && *state < 6)
+    {
+        if (retryCount)
+        {
+            retryCount--;
+            if (retryCount)
+            {
+                tx('R');
+                net.retryTime = 3; // ToDo: 15
+            }
+            else
+            {
+                tx('W');
+                tx('\r');
+                tx('\n');
+                net.retryTime = 15; // ToDo: 900
+                return;
+            }
+        }
+        else
+        {
+            tx('F');
+            *state &= 4;
+            if (*state == 0)
+                *state = 1;
+            net.retryTime = 3; // ToDo: 15
+            retryCount = 4;
+        }
+        tx(' ');
+        txHex(*state);
+        tx(' ');
+        txHex(retryCount);
+        tx('\r');
+        tx('\n');
+    }
+    else
         return;
 
     sendPacket(*state); // ToDo: deal with buffer overflow !!!
     flag &= ~ARP_REPLY;
 }
 
+void checkUseDhcp()
+{
+    uint8_t c = 1; // ToDo: 8
+    R_REG(c);
+    uint8_t* ptr = net.myIpInit + 1; // ToDo: net.myIpInit + 8
+    do
+    {
+        if (*--ptr != 0)
+        {
+            flag &= ~USE_DHCP;
+            copyAddr(netOffset(myIp), netOffset(myIpInit));
+            copyAddr(netOffset(arpIp), netOffset(arpIpInit));
+            return;
+        }
+    } while (--c);
+    flag |= USE_DHCP;
+}
+
 void init()
 {
-    copyAddr(netOffset(myIp), netOffset(myIpInit));
-    copyAddr(netOffset(gwIp), netOffset(gwIpInit));
+    checkUseDhcp();
     copyAddr(netOffset(xid), netOffset(myMac));
 }
 

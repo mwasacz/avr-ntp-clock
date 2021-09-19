@@ -24,13 +24,14 @@ typedef struct
 {
     uint16_t leaseTime;
     uint16_t syncTime;
+    uint16_t retryTime;
     uint8_t timestamp[6];
     uint8_t arpReplyMac[6];
     uint8_t dstMac[6];
     uint8_t myMac[6];
-    uint8_t dstIp[4];
     uint8_t myIpInit[4];
-    uint8_t gwIpInit[4];
+    uint8_t arpIpInit[4];
+    uint8_t dstIp[4];
     uint32_t time;
     uint8_t myIp[4];
     uint8_t gwIp[4];
@@ -39,11 +40,20 @@ typedef struct
     uint8_t arpIp[4];
     uint8_t arpReplyIp[4];
     uint8_t xid[4];
-    //uint8_t retryTime;
+    //uint8_t retryCount;
+    //uint8_t flag;
 } net_t;
 
 extern net_t net;
-#define retryTime TWBR
+
+//#define retryTime OCR2
+#define retryCount TWBR
+
+#define flag TWAR
+#define ARP_REPLY (1<<0)
+#define TIME_OK (1<<1)
+#define SYNC_ERROR (1<<2)
+#define USE_DHCP (1<<3)
 
 #define CRC_LEN 4
 

@@ -255,8 +255,10 @@
 // (note: maximum ethernet frame length would be 1518)
 #define        MAX_FRAMELEN        1500
 
-extern void enc28j60Init();
-extern void enc28j60WriteMac(uint8_t* myMac);
+extern void tx(uint8_t data);
+extern void txHex(uint8_t data);
+
+extern void enc28j60Init(uint8_t* myMac);
 extern uint8_t enc28j60LinkUp();
 
 extern uint8_t enc28j60PacketReceived();

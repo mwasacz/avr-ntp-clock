@@ -151,7 +151,7 @@ static void enc28j60PhyWrite(uint8_t address, uint16_t data)
     while(enc28j60ReadMacMii(B3_MISTAT) & MISTAT_BUSY);
 }
 
-void enc28j60Init()
+void enc28j60Init(uint8_t* myMac)
 {
     // perform system reset
     CS_LO;
@@ -207,6 +207,16 @@ void enc28j60Init()
     // Set the maximum packet size which the controller will accept
     enc28j60Write(B2_MAMXFLL, MAX_FRAMELEN&0xFF);  
     enc28j60Write(B2_MAMXFLH, MAX_FRAMELEN>>8);
+    
+    // do bank 3 stuff
+    enc28j60SetBank(3);
+    // write MAC address
+    // NOTE: MAC address in ENC28J60 is byte-backward
+    for (uint8_t c = ENC28J60_WRITE_CTRL_REG | (B3_MAADR1 + 5); c >= (ENC28J60_WRITE_CTRL_REG | B3_MAADR1); c--)
+    {
+        Y_REG(myMac);
+        enc28j60WriteOp(c ^ 1, *--myMac);
+    }
 
     // half duplex mode
     enc28j60PhyWrite(PHCON1, 0);
@@ -219,20 +229,6 @@ void enc28j60Init()
 
     // enable packet reception
     enc28j60BitFieldSet(ECON1, ECON1_RXEN);
-}
-
-void enc28j60WriteMac(uint8_t* myMac)
-{
-    // do bank 3 stuff
-    enc28j60SetBank(3);
-    // write MAC address
-    // NOTE: MAC address in ENC28J60 is byte-backward
-
-    for (uint8_t c = ENC28J60_WRITE_CTRL_REG | (B3_MAADR1 + 5); c >= (ENC28J60_WRITE_CTRL_REG | B3_MAADR1); c--)
-    {
-        Y_REG(myMac);
-        enc28j60WriteOp(c ^ 1, *--myMac);
-    }
 }
 
 uint8_t enc28j60ReadByte()

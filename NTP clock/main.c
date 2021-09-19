@@ -59,11 +59,6 @@ static uint8_t page = 0;//12;
 
 //static volatile uint8_t dig[5] = {1,1,1,1,1};
 
-#define flag TWAR
-#define TIME_OK (1<<1)
-//#define SUBMENU (1<<3)
-//#define VALOVF (1<<4)
-
 /*----------------------------------------------------------------------*
  *                                                                      *
  *  FUNCTIONS                                                           *
@@ -321,12 +316,14 @@ int main()
     while (1)
     {
     init();
-    enc28j60Init();
-    enc28j60WriteMac(&net.myMac[6]); // Do in enc28j60Init
+    enc28j60Init(&net.myMac[6]);
 
     uint8_t old;
     uint16_t NextPacketPtr = RXSTART_INIT;
     uint8_t st = 1;
+    R_REG(st);
+    if (!(flag & USE_DHCP))
+        st = 4;
     while (1)
     {
         //if (!enc28j60LinkUp())
@@ -356,8 +353,12 @@ int main()
         else
         {
             st = 1;
+            R_REG(st);
+            if (!(flag & USE_DHCP))
+                st = 4;
             state = 0;
-            retryTime = 0;
+            net.retryTime = 0;
+            retryCount = 5;
         }
 
         //while (PIND & (1<<LED)); // ToDo: test buffer overflow
@@ -391,7 +392,7 @@ int main()
     }
     page = 18;
 
-    uint8_t addr = 10;
+    uint8_t addr = 18;
     uint8_t dig1 = 0, dig2 = 0, dig3 = 0;//, val = 0;
     uint8_t pos = 0;
 
@@ -432,8 +433,9 @@ int main()
                     addr--;
                     if (addr == 255) // ToDo
                         break;
-                    disp[19] = 0;//addr >> 2;
-                    disp[18] = 9 - addr;// & 3;
+                    uint8_t a = 17 - addr;
+                    disp[19] = a / 10;//addr >> 2;
+                    disp[18] = a % 10;// & 3;
                 }
                 else if (pos == 1)
                 {
@@ -500,22 +502,18 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 {
     //LED_ON;
     
-    if (retryTime)
-        retryTime--;
-    
     net_t *ptr = &net;
     E_REG(ptr);
+    
+    if (ptr->leaseTime)
+    ptr->leaseTime--;
 
     if (ptr->syncTime)
         ptr->syncTime--;
-    else if (state == 6) // ToDo: set flag instead
-        state = 4;
-
-    if (ptr->leaseTime)
-        ptr->leaseTime--;
-    else if (state > 3) // ToDo: set flag instead
-        state = 3;
-
+    
+    if (ptr->retryTime)
+        ptr->retryTime--;
+    
     if (flag & TIME_OK)
     {
         //test();
