@@ -28,6 +28,7 @@
  *  FONT DEFINITION                                                     *
  *----------------------------------------------------------------------*/
 
+#ifndef __AVR_ATtiny4313__
 const __flash uint8_t font[] = {
     0xC0,    // 0
     0xF9,    // 1
@@ -41,23 +42,21 @@ const __flash uint8_t font[] = {
     0x90,    // 9
     0xFF,    // -
 };
+#endif
 
 /*----------------------------------------------------------------------*
  *  VARIABLES                                                           *
  *----------------------------------------------------------------------*/
 
-//static uint32_t time = 0;
-
-//                             SEC  MIN  HOUR  WEEK  MON  DAY   MODE  YEAR
-static uint8_t disp[24] = {0,0, 0,0, 0,0,  6,10, 1,0, 1,0,  0,10, 0,0,0,2, 0,0,0,0,0,10};
-//                       BLINK      X X  X X         X X  X X   X     X X
-//                       CNT   1 2  3 4  5 6   1 2   3 4  5 6   1 2   3 4 5 6
-//                       PAGE  0 0  0 0  0 0   1 1   1 1  1 1   2 2   2 2 2 2
+//                         SEC  MIN  HOUR WEEK  MON  DAY  STATE YEAR     MENU          PAGE CNT
+static uint8_t disp[26] = {0,0, 0,0, 0,0, 6,10, 1,0, 1,0, 0,10, 0,0,0,2, 0,0,0,0,0,10, 0,1};
+//                   CNT   1 2  3 4  5 6  1 2   3 4  5 6  1 2   3 4 5 6
+//                   PAGE  0 0  0 0  0 0  1 1   1 1  1 1  2 2   2 2 2 2
 #define state disp[12]
-
-static uint8_t page = 0;//12;
-
-//static volatile uint8_t dig[5] = {1,1,1,1,1};
+#define page disp[24]
+#define dispPage 24
+#define dispCnt 25
+//static uint8_t page = 0;//12;
 
 /*----------------------------------------------------------------------*
  *                                                                      *
@@ -232,7 +231,7 @@ static void checkPinChange()
 
 static void eepromRead()
 {
-    while (EECR & (1<<EEWE));
+    while (EECR & (1<<EEPE));
 
     uint16_t c = 18;
     uint8_t* ptr = &net.myMac[18];
@@ -246,13 +245,13 @@ static void eepromRead()
 
 static void eepromWrite(uint8_t p, uint8_t val)
 {
-    while (EECR & (1<<EEWE));
+    while (EECR & (1<<EEPE));
 
     EEAR = p;
     EEDR = val;
     cli(); // ToDo
-    EECR |= (1<<EEMWE);
-    EECR |= (1<<EEWE);
+    EECR |= (1<<EEMPE);
+    EECR |= (1<<EEPE);
     sei();
 }
 
@@ -266,48 +265,66 @@ static void eepromWrite(uint8_t p, uint8_t val)
 
 int main()
 {
-    //PORTB = (1<<CS);
+    // ToDo: use sbi when configuring registers
+#ifdef __AVR_ATtiny4313__
+    DISP_CS_PORT = (1<<CS);
+    DISP_CS_DDR = (1<<CS) | DISP_SEL | DISP_SEG;
 
-    //DDRB  = (1<<CS) | DISP_SEL | DISP_SEG;
-    DDRD  = /*(1<<LED) |*/ (1<<SPI_SI) | (1<<SPI_SCK) | (1<<1) | (1<<CS);
-
-    PORTA = 0xFF;
-    DDRA  = 0xFF;
-    PORTB = 0x0F;
-    DDRB  = 0x0F;
-    //PORTC = 0xFF;
-    //DDRC  = 0xFF;
-
-    PORTD = /*(1<<SPI_SO) |*/ (1<<SW_1) | (1<<SW_2) | (1<<VOL) | (1<<CS) | (1<<LED);
+    MAIN_PORT = (1<<SW_1) | (1<<SW_2) | (1<<PWR_SENSE);
+    MAIN_DDR = (1<<LED) | (1<<SPI_SI) | (1<<SPI_SCK);
     
-    //ACSR  = (1<<ACBG) | (1<<ACIE);
-    ACSR  = (1<<ACD);
-    //PRR   = (1<<PRUSI) | (1<<PRUSART);
+    ACSR = (1<<ACD);
+    PRR = (1<<PRUSI) | (1<<PRUSART);
+
+    TCCR0A = (1<<CS01) | (1<<CS00);
+    OCR0A = 127;
+    //TCCR0A = (1<<WGM01);
+    //OCR0A = 207;
+    //OCR0B = 103;
+    
+    TCCR1B = (1<<CS12) | (1<<WGM13) | (1<<WGM12);
+    ICR1 = 46874;
+    OCR1A = 23436;
+    //TCCR1B = (1<<CS12) | (1<<WGM12);
+    //OCR1A = 46874;
+    //OCR1B = 23436;
+    
+    MCUCR = (1<<ISC10) | (1<<ISC00);
+    
+    TIMSK = (1<<OCIE1A) | (1<<ICIE1) | (1<<TOIE0);
+    //TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<OCIE0B);
+#else
+    MAIN_PORT = (1<<TX) | (1<<SW_1) | (1<<SW_2) | (1<<CS);
+    MAIN_DDR = (1<<LED) | (1<<TX) | (1<<SPI_SI) | (1<<SPI_SCK) | (1<<CS);
+    
+    DISP_SEL_PORT = (1<<SW_DISP_SEL) | DISP_SEL;
+    DISP_SEL_DDR = DISP_SEL;
+    
+    DISP_SEG_PORT = DISP_SEG;
+    DISP_SEG_DDR = DISP_SEG;
+    
+    ACSR = (1<<ACD);
 
     // Timer config
-    //TCCR0A= (1<<WGM01);// | (1<<CS02);
-    TCCR0 = (1<<CS01) | (1<<CS00);//(1<<CS02);
-    OCR0  = 127;
-    //OCR0A  = 103;//207;
+    TCCR0 = (1<<CS01) | (1<<CS00);
+    OCR0 = 127;
     
-    TCCR1B= (1<<CS12) | (1<<WGM13) | (1<<WGM12);
-    ICR1  = 62499;//46874
-    OCR1A = 31249;//23436
-    //TCCR1B= (1<<CS12) | (1<<WGM12);
-    //OCR1A = 62499;//46874
-    //OCR1B = 31249;//23436
+    TCCR1B = (1<<CS12) | (1<<WGM13) | (1<<WGM12);
+    ICR1 = 62499;
+    OCR1A = 31249;
+    //TCCR1B = (1<<CS12) | (1<<WGM12);
+    //OCR1A = 62499;
+    //OCR1B = 31249;
     
-    TIMSK = (1<<OCIE1A) | (1<<TICIE1)/* | (1<<OCIE1B)*/ | (1<<TOIE0);//(1<<OCIE0A);
-
-    MCUCR = (1<<ISC10) | (1<<ISC00);// | (1<<SE);
-    //PCMSK2= (1<<PCINT12);
-    //GICR = (1<<INT1) | (1<<INT0);// | (1<<PCIE2);
-
+    TIMSK = (1<<OCIE1A) | (1<<TICIE1) | (1<<TOIE0);
+    
+    MCUCR = (1<<ISC10) | (1<<ISC00);
+    
     UCSRB = (1<<TXEN);
     UBRRL = 20;
+#endif
 
     // ToDo: check SW1,2_ISON and set page
-    
     
     eepromRead();
 
@@ -375,7 +392,7 @@ int main()
         
         if (TIFR & (1<<OCF1B))
         {
-            old = SW_PIN;
+            old = MAIN_PIN;
 
             if (!(old & (1<<SW_1)))
             {
@@ -402,7 +419,7 @@ int main()
 
         if (TIFR & (1<<OCF1B))
         {
-            uint8_t new = SW_PIN;
+            uint8_t new = MAIN_PIN;
             uint8_t btn = old & ~new;
             old = new;
 
@@ -430,9 +447,9 @@ int main()
                     dig2 = val / 10;
                     dig3 = val % 10;
                     
-                    addr--;
-                    if (addr == 255) // ToDo
+                    if (addr == 0) // ToDo
                         break;
+                    addr--;
                     uint8_t a = 17 - addr;
                     disp[19] = a / 10;//addr >> 2;
                     disp[18] = a % 10;// & 3;
@@ -500,7 +517,7 @@ int main()
 //ISR(TIMER1_COMPA_vect, ISR_NOBLOCK)
 ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 {
-    //LED_ON;
+    MAIN_PORT &= ~(1<<LED);
     
     net_t *ptr = &net;
     E_REG(ptr);
@@ -527,54 +544,67 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 //ISR(TIMER1_COMPB_vect, ISR_NAKED)
 ISR(TIMER1_COMPA_vect, ISR_NAKED)
 {
-    //LED_OFF;
-    //reti();
-    asm (
-        //"sbi %0, %1 \n"
+    asm volatile (
+        "sbi %0, %1 \n"
         "reti \n"
         :
-        : "I"(_SFR_IO_ADDR(LED_PORT)), "I"(LED)
+        : "I"(_SFR_IO_ADDR(MAIN_PORT)), "I"(LED)
     );
 }
 
 ISR(TIMER0_OVF_vect)
 {
-    static uint8_t cnt;
+    uint8_t* ptr = disp - 1;
+    E_REG(ptr);
+    
+    uint8_t c = ptr[dispCnt + 1];
+    c--;
+    if (c == 0)
+#ifdef __AVR_ATtiny4313__
+        c = 6;
+#else
+        c = 4;
+#endif
+    ptr[dispCnt + 1] = c;
+    
+    uint8_t p = ptr[dispPage + 1];
+    p += c;
 
-    //PORTD = ~(1<<cnt) & 0x3F;
-    //PORTC = data[cnt];
-    uint8_t x = cnt + page;
+#ifdef __AVR_ATtiny4313__
+    uint8_t d = ptr[p];
+    c |= (d << 4) | (d >> 4);
+    if (DISP_CS_PORT & (1<<CS))
+        c |= (1<<CS);
+    DISP_CS_PORT = c; 
+#else
+    if (!(DISP_SEL_PIN & (1<<SW_DISP_SEL)))
+        p += 2;
 
-    if (!(PIND & (1<<LED)))
-        x += 2;
-
-    //cnt++;
-
-    //if (blink && blink == x && LED_ISOFF)
-    //    DISP_PORT = (DISP_PORT & ~(DISP_SEL | DISP_SEG));
-    //else
-    //    DISP_PORT = (DISP_PORT & ~(DISP_SEL | DISP_SEG)) | (datetime[x] << 4) | cnt;
-    PORTB = (~(1<<cnt)) & 0x0F;
-    PORTA = font[disp[x]];
-    cnt++;
-    if (cnt > 5)
-    {
-        cnt = 0;
-    }
+    DISP_SEL_PORT = (~(1 << (c - 1)) & DISP_SEL) | (1<<SW_DISP_SEL);
+    DISP_SEG_PORT = font[ptr[p]];
+#endif
 }
 
-/*
-// ToDo: use ISR_NAKED, consider situation when both pressed
-ISR(INT0_vect)
+#ifdef __AVR_ATtiny4313__
+ISR(TIMER0_COMPA_vect, ISR_NAKED)
 {
-        if (SW_1_ISON && SW_2_ISON)
-            page = 14;
-        else if (SW_1_ISON)
-            page = 4;
-        else if (SW_2_ISON)
-            page = 8;
-        else
-            page = 0;
+    uint8_t x;
+    asm volatile (
+        "push %0 \n"
+        "ldi %0, %3 \n"
+        "sbic %1, %2 \n"
+        "ldi %0, %3 | (1 << %2) \n"
+        "out %1, %0 \n"
+        "pop %0 \n"
+        "reti \n"
+        : "=d"(x)
+        : "I"(_SFR_IO_ADDR(DISP_CS_PORT)), "I"(CS), "M"(10 << 4)
+    );
 }
-
-ISR(INT1_vect, ISR_ALIASOF(INT0_vect));*/
+#else
+ISR(TIMER0_COMP_vect)
+{
+    DISP_SEL_PORT = (1<<SW_DISP_SEL) | DISP_SEL;
+    DISP_SEG_PORT = DISP_SEG;
+}
+#endif

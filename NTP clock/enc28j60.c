@@ -7,13 +7,27 @@
 
 #include "enc28j60.h"
 
-// ToDo:
-// DEBUG -----------------
+#ifdef __AVR_ATtiny4313__
+#define CS_LO   DISP_CS_PORT &= ~(1<<CS)
+#define CS_HI   DISP_CS_PORT |= (1<<CS)
+#else
+#define CS_LO   MAIN_PORT &= ~(1<<CS)
+#define CS_HI   MAIN_PORT |= (1<<CS)
+#endif
+
+#define SO_IN   MAIN_PIN & (1<<SPI_SO)
+#define SI_HI   MAIN_PORT |= (1<<SPI_SI)
+#define SI_LO   MAIN_PORT &= ~(1<<SPI_SI)
+#define SCK_HI  MAIN_PORT |= (1<<SPI_SCK)
+#define SCK_LO  MAIN_PORT &= ~(1<<SPI_SCK)
+
+#ifndef __AVR_ATtiny4313__
 void tx(uint8_t data)
 {
     while (!(UCSRA & (1<<UDRE)));
     UDR = data;
 }
+
 void txHex(uint8_t data)
 {
     uint8_t hi = (data >> 4) + '0';
@@ -25,18 +39,7 @@ void txHex(uint8_t data)
     lo += 'A' - '9' - 1;
     tx(lo);
 }
-// /DEBUG ----------------
-
-// set CS to 0 = active
-#define CS_LO   CS_PORT &= ~(1<<CS)
-// set CS to 1 = passive
-#define CS_HI   CS_PORT |= (1<<CS)
-
-#define SO_IN   SPI_PIN & (1<<SPI_SO)
-#define SI_HI   SPI_PORT |= (1<<SPI_SI)
-#define SI_LO   SPI_PORT &= ~(1<<SPI_SI)
-#define SCK_HI  SPI_PORT |= (1<<SPI_SCK)
-#define SCK_LO  SPI_PORT &= ~(1<<SPI_SCK)
+#endif
 
 static uint8_t spiTransfer(uint8_t data)
 {
@@ -55,6 +58,11 @@ static uint8_t spiTransfer(uint8_t data)
     return data;
 }
 
+static uint8_t spiTransferZero()
+{
+    return spiTransfer(0);
+}
+
 static uint8_t enc28j60ReadOp(uint8_t opAddr)
 {
     // assert CS
@@ -63,7 +71,7 @@ static uint8_t enc28j60ReadOp(uint8_t opAddr)
     // issue read command
     spiTransfer(opAddr);
     // read data
-    uint8_t data = spiTransfer(0x00);
+    uint8_t data = spiTransferZero();
 
     // release CS
     CS_HI;
@@ -79,9 +87,9 @@ static uint8_t enc28j60ReadOpMacMii(uint8_t opAddr)
     // issue read command
     spiTransfer(opAddr);
     // dummy read
-    spiTransfer(0x00);
+    spiTransferZero();
     // read data
-    uint8_t data = spiTransfer(0x00);
+    uint8_t data = spiTransferZero();
 
     // release CS
     CS_HI;
@@ -231,10 +239,15 @@ void enc28j60Init(uint8_t* myMac)
     enc28j60BitFieldSet(ECON1, ECON1_RXEN);
 }
 
+#ifdef __AVR_ATtiny4313__
+inline __attribute__((always_inline))
+#endif
 uint8_t enc28j60ReadByte()
 {
-    uint8_t data = spiTransfer(0);
+    uint8_t data = spiTransferZero();
+#ifndef __AVR_ATtiny4313__
     txHex(data);
+#endif
     return data;
 }
 
@@ -268,22 +281,22 @@ uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr)//uint16_t maxlen, uint8_t* 
     spiTransfer(ENC28J60_READ_BUF_MEM);
 
     // read the next packet pointer
-    uint8_t lo = spiTransfer(0);
-    uint8_t hi = spiTransfer(0);
+    uint8_t lo = spiTransferZero();
+    uint8_t hi = spiTransferZero();
     *NextPacketPtr = WORD(lo, hi);
     //NextPacketPtr  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
     //NextPacketPtr |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
     // read the packet length
-    lo = spiTransfer(0);
-    hi = spiTransfer(0);
+    lo = spiTransferZero();
+    hi = spiTransferZero();
     len = WORD(lo, hi);
     //len  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
     //len |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
     // remove the CRC count
     //len -= 4;
     // read the receive status
-    rxstat = spiTransfer(0);
-    spiTransfer(0);
+    rxstat = spiTransferZero();
+    spiTransferZero();
     //rxstat  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
     //rxstat |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
 
@@ -328,15 +341,32 @@ void enc28j60EndRead(uint16_t* NextPacketPtr)
     // decrement the packet counter indicate we are done with this packet
     enc28j60BitFieldSet(ECON2, ECON2_PKTDEC);
 
+#ifndef __AVR_ATtiny4313__
     tx('\r');
     tx('\n');
+#endif
 }
 
-// ToDo: enc28j60WriteZero
+#ifdef __AVR_ATtiny4313__
+inline __attribute__((always_inline))
+#endif
 void enc28j60WriteByte(uint8_t data)
 {
     spiTransfer(data);
+#ifndef __AVR_ATtiny4313__
     txHex(data);
+#endif
+}
+
+#ifdef __AVR_ATtiny4313__
+inline __attribute__((always_inline))
+#endif
+void enc28j60WriteZero()
+{
+    spiTransferZero();
+#ifndef __AVR_ATtiny4313__
+    txHex(0);
+#endif
 }
 
 void enc28j60WritePacket(uint16_t txnd)//len)
@@ -372,10 +402,12 @@ void enc28j60WritePacket(uint16_t txnd)//len)
 
     // write per-packet control byte
     //enc28j60WriteOp(ENC28J60_WRITE_BUF_MEM, 0, 0x00);
-    spiTransfer(0); // ToDo
+    spiTransferZero(); // ToDo
     //enc28j60WriteByte(0);
 
+#ifndef __AVR_ATtiny4313__
     tx('\t');
+#endif
 }
 
 void enc28j60EndWrite()
@@ -386,8 +418,10 @@ void enc28j60EndWrite()
     // send the contents of the transmit buffer onto the network
     enc28j60BitFieldSet(ECON1, ECON1_TXRTS);
     
+#ifndef __AVR_ATtiny4313__
     tx('\r');
     tx('\n');
+#endif
 }
 
 uint8_t enc28j60LinkUp()

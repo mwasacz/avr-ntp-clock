@@ -40,16 +40,23 @@ typedef struct
     uint8_t arpIp[4];
     uint8_t arpReplyIp[4];
     uint8_t xid[4];
+    uint16_t ipId;
     //uint8_t retryCount;
     //uint8_t flag;
 } net_t;
 
-extern net_t net;
+extern net_t net; // ToDo: __attribute__((section(".noinit")));
 
+#ifdef __AVR_ATtiny4313__
+//#define retryTime GPIOR2
+#define retryCount GPIOR1
+#define flag GPIOR0
+#else
 //#define retryTime OCR2
 #define retryCount TWBR
-
 #define flag TWAR
+#endif
+
 #define ARP_REPLY (1<<0)
 #define TIME_OK (1<<1)
 #define SYNC_ERROR (1<<2)
@@ -75,8 +82,6 @@ extern net_t net;
 #define ETH_ARP_OPCODE_REQ_L_V 0x01
 // start of arp header:
 #define ETH_ARP_P 0xe
-//
-#define ETHTYPE_ARP_L_V 0x06
 // arp.dst.ip
 #define ETH_ARP_DST_IP_P 0x26
 // arp.opcode

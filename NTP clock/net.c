@@ -27,7 +27,7 @@ static void writeZeros(uint8_t len)
 {
     do
     {
-        enc28j60WriteByte(0);
+        enc28j60WriteZero();
     } while (--len);
 }
 
@@ -182,7 +182,7 @@ static void sendDhcpPacket(uint8_t state)
     enc28j60WriteByte(1); // OP
     enc28j60WriteByte(1); // HTYPE
     enc28j60WriteByte(6); // HLEN
-    enc28j60WriteByte(0); // HOPS
+    enc28j60WriteZero(); // HOPS
     writeAddr(netOffset(xid)); // Transaction ID // ToDo: 16 xid ?
 
     if (state == 3)
@@ -269,17 +269,17 @@ static void sendNtpPacket(uint8_t state)
 
 static void sendUdpPacket(uint16_t len, uint8_t state)
 {
-    enc28j60WriteByte(0); // Source port H // ToDo: consider variable Source port higher than 1024
+    enc28j60WriteZero(); // Source port H // ToDo: consider variable Source port higher than 1024
     if (state == 5)
     {
         enc28j60WriteByte(123); // Source port L
-        enc28j60WriteByte(0); // Destination port H // ToDo: consider configurable Destination port
+        enc28j60WriteZero(); // Destination port H // ToDo: consider configurable Destination port
         enc28j60WriteByte(123); // L
     }
     else
     {
         enc28j60WriteByte(68); // Source port L
-        enc28j60WriteByte(0); // Destination port H
+        enc28j60WriteZero(); // Destination port H
         enc28j60WriteByte(67); // L
     }
 
@@ -296,17 +296,15 @@ static void sendUdpPacket(uint16_t len, uint8_t state)
 
 static void sendIpPacket(uint16_t len, uint8_t state)
 {
-    static uint16_t ipId;
-
     enc28j60WriteByte(0x45); // Version, IHL
-    enc28j60WriteByte(0x00); // DSCP, ECN
+    enc28j60WriteZero(); // DSCP, ECN
 
     len -= TXSTART_INIT + ETH_HEADER_LEN;
     R_REG(len);
     enc28j60WriteByte(H(len)); // Length H
     enc28j60WriteByte(L(len)); // L
     
-    uint16_t* ptr = &ipId;
+    uint16_t* ptr = &net.ipId;
     E_REG(ptr);
     uint16_t id = *ptr + 1;
     *ptr = id;
@@ -316,7 +314,7 @@ static void sendIpPacket(uint16_t len, uint8_t state)
     enc28j60WriteByte(L(id)); // L
     
     enc28j60WriteByte(0x40); // Flags - DF, Fragment offset H
-    enc28j60WriteByte(0x00); // L
+    enc28j60WriteZero(); // L
     enc28j60WriteByte(0x20); // TTL // ToDo: TTL 0x40 ???
     enc28j60WriteByte(IP_PROTO_UDP_V); // Protocol
 
@@ -359,15 +357,15 @@ static void sendIpPacket(uint16_t len, uint8_t state)
 
 static void sendArpPacket(uint8_t state)
 {
-    enc28j60WriteByte(0); // Hardware type H
+    enc28j60WriteZero(); // Hardware type H
     enc28j60WriteByte(1); // L
     enc28j60WriteByte(8); // Protocol type H
-    enc28j60WriteByte(0); // L
+    enc28j60WriteZero(); // L
     enc28j60WriteByte(6); // Hardware address length
     enc28j60WriteByte(4); // Protocol address length
 
     // Operation
-    enc28j60WriteByte(0);
+    enc28j60WriteZero();
     uint8_t operL = 1;
     R_REG(operL);
     if (flag & ARP_REPLY)
@@ -411,7 +409,7 @@ static void sendEthPacket(uint16_t len, uint8_t state)
     }
     else
     {
-        enc28j60WriteByte(ETHTYPE_IP_L_V);
+        enc28j60WriteZero(); // ETHTYPE_IP_L_V
         sendIpPacket(len, state);
     }
 }
@@ -485,13 +483,15 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
             uint8_t l = enc28j60ReadByte();
             readLen += l;
             if (readLen > len) return;
-            if (code == 53 && l == 1) // ToDo: check duplicate options
+            if (code == 53 && l == 1)
             {
+                if (found & 0x04) return;
                 type = enc28j60ReadByte();
                 found |= 0x04;
             }
             else if (code == 54 && l == 4)
             {
+                if (found & 0x10) return;
                 if (*state == 1)
                     readAddr(netOffset(serverId));
                 else
@@ -500,6 +500,7 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
             }
             else if (code == 51 && l == 4)
             {
+                if (found & 0x08) return;
                 uint8_t max = enc28j60ReadByte() | enc28j60ReadByte();
                 uint8_t hi = enc28j60ReadByte();
                 uint8_t lo = enc28j60ReadByte();
@@ -512,6 +513,7 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
             }
             else if (code == 1 && l == 4)
             {
+                if (found & 0x01) return;
                 readAddr(netOffset(netmask));
                 found |= 0x01;
             }
@@ -519,6 +521,7 @@ static void receiveDhcpPacket(uint16_t len, uint8_t* state)
             {
                 if (code == 3 && l >= 4)
                 {
+                    if (found & 0x02) return;
                     readAddr(netOffset(gwIp));
                     found |= 0x02;
                     l -= 4;
@@ -680,7 +683,11 @@ static void receiveNtpPacket(uint8_t* state)
     cli();// ToDo
     //TIMSK |= (1<<OCIE1A) | (1<<OCIE1B);
     
+#ifdef __AVR_ATtiny4313__
+    GTCCR = (1<<PSR10);
+#else
     SFIOR = (1<<PSR10);
+#endif
     TCNT1 = resTcnt.w[1];
 
     ptr = &net;
@@ -695,9 +702,11 @@ static void receiveNtpPacket(uint8_t* state)
     ptr->syncTime = 20; // ToDo: 3600
     *state = 6;
     flag &= ~SYNC_ERROR;
+#ifndef __AVR_ATtiny4313__
     tx('\r');
     tx('\n');
     tx(':');
+#endif
 }
 
 static void receiveUdpPacket(uint16_t len, uint8_t* state)
@@ -831,18 +840,22 @@ void loop(uint8_t* state, uint16_t* NextPacketPtr)
     
     if (lease == 0 && *state > 3 && (flag & USE_DHCP))
     {
+#ifndef __AVR_ATtiny4313__
         tx('L');
         tx('\r');
         tx('\n');
+#endif
         *state = 3;
         net.retryTime = 0;
         retryCount = 5;
     }
     else if (sync == 0 && *state > 5)
     {
+#ifndef __AVR_ATtiny4313__
         tx('S');
         tx('\r');
         tx('\n');
+#endif
         *state = 4;
         net.retryTime = 0;
         retryCount = 5;
@@ -850,12 +863,14 @@ void loop(uint8_t* state, uint16_t* NextPacketPtr)
     
     if (sync == 0 && retryCount == 0) // ToDo: relocate this
     {
+#ifndef __AVR_ATtiny4313__
         if (!(flag & SYNC_ERROR))
         {
             tx('.');
             tx('\r');
             tx('\n');
         }
+#endif
         flag |= SYNC_ERROR;
     }
     
@@ -869,33 +884,41 @@ void loop(uint8_t* state, uint16_t* NextPacketPtr)
             retryCount--;
             if (retryCount)
             {
+#ifndef __AVR_ATtiny4313__
                 tx('R');
+#endif
                 net.retryTime = 3; // ToDo: 15
             }
             else
             {
+#ifndef __AVR_ATtiny4313__
                 tx('W');
                 tx('\r');
                 tx('\n');
+#endif
                 net.retryTime = 15; // ToDo: 900
                 return;
             }
         }
         else
         {
+#ifndef __AVR_ATtiny4313__
             tx('F');
+#endif
             *state &= 4;
             if (*state == 0)
                 *state = 1;
             net.retryTime = 3; // ToDo: 15
             retryCount = 4;
         }
+#ifndef __AVR_ATtiny4313__
         tx(' ');
         txHex(*state);
         tx(' ');
         txHex(retryCount);
         tx('\r');
         tx('\n');
+#endif
     }
     else
         return;

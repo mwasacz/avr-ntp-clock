@@ -26,6 +26,3 @@
 *.atsuo
 
 # End of https://www.gitignore.io/api/atmelstudio
-
-# Component info
-*.componentinfo.xml
