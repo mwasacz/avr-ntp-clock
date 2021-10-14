@@ -12,7 +12,7 @@
 /*----------------------------------------------------------------------*
  *  INCLUDES                                                            *
  *----------------------------------------------------------------------*/
- 
+
 #include <avr/io.h>
 #include <avr/interrupt.h>
 //#include <avr/sleep.h>
@@ -21,7 +21,7 @@
 #include "net.h"
 #include "config.h"
 
-#define SEC_OFFSET 3155670000
+#define SEC_OFFSET 3155673600
 #define MAX_SEC 3155760000
 
 /*----------------------------------------------------------------------*
@@ -64,152 +64,234 @@ static uint8_t disp[26] = {0,0, 0,0, 0,0, 6,10, 1,0, 1,0, 0,10, 0,0,0,2, 0,0,0,0
  *                                                                      *
  *----------------------------------------------------------------------*/
 
-/*static uint8_t monthLen(uint8_t mon)
-{
-    if (mon == 2)
-    {
-        if ((datetime[14] & 3) != (datetime[15] & 2))
-        return 28;
-        else
-        return 29;
-    }
-    else
-    {
-        uint8_t x;
-        if (mon < 8)
-        x = mon;
-        else
-        x = mon - 1;
-        return 30 + (x & 1);
-    }
-}*/
+#define swapWord(a, b) \
+do \
+{ \
+    uint16_t temp; \
+    asm ( \
+        "movw %2, %1 \n" \
+        "movw %1, %0 \n" \
+        "movw %0, %2 \n" \
+        : "+r"(a), "+r"(b), "=r"(temp) \
+    ); \
+} while (0)
 
-/*static void test()
+static void displayTime(uint32_t ts)
 {
-    uint8_t year = dig[4];
-    uint16_t days = (uint16_t)year * 365;
-    days += (uint8_t)(year + 3) >> 2;
-    days += ((uint16_t)dig[3] * 367 - 362) / 12; // ToDo
-    days += dig[2];
-    uint32_t hours = (uint32_t)days * 24;
-    hours += dig[1];
-    uint32_t minutes = (uint32_t)hours * 60;
-    minutes += dig[0];
-    TCNT1 = minutes;
-    TCNT1 = minutes >> 16;
-}*/
+    ts -= SEC_OFFSET;
 
-static uint8_t isDst(uint8_t day, uint8_t monthL, uint8_t dow, uint8_t hour)
-{
-    if (monthL == 1) return 0;
-    if (monthL == 2) return 0;
-    if (monthL > 3) return 1;
+    //uint32_t maxSec = MAX_SEC; // ToDo: MAX_SEC cap doesnt work because the timezone offset is applied later
+    //R_REG(maxSec);
+    //if (ts > maxSec)
+    //    ts = maxSec;
 
-    if (dow == 7 && day > 24 && hour > 1) return (monthL != 0);
+    uint8_t second = ts % 60;
+    uint32_t tmm = ts / 60;
+
+    disp[0] = second % 10;
+    disp[1] = second / 10;
     
-    uint8_t previousSunday = day - dow;
-    if (previousSunday > 24) return (monthL != 0);
-    return (monthL == 0);
-}
-
-static uint8_t date(uint24_t x)
-{
-    uint32_t th = x;
-    uint8_t hours = th % 24;
-    disp[4] = hours % 10;
-    disp[5] = hours / 10;
-
-    uint16_t td = th / 24;
-
-    uint8_t dow = (td + 5) % 7;
-    dow++;
-    disp[6] = dow;
-
-    //uint32_t x = td << 2;
-    //uint8_t year = x / 1461;
-    //uint16_t days = (x % 1461) >> 2;
+    timezone_t *tzAlt = &net.config.timezones[1];
+    timezone_t *tz = &net.config.timezones[0];
+    uint8_t cmpCnt = 5;
+    uint8_t cnt = 3;
+    R_REG(tzAlt);
+    E_REG(tz);
+    R_REG(cmpCnt);
+    R_REG(cnt);
     
-    uint16_t temp = 366;
-    uint8_t year = 0;
-    while (td >= temp)
+    uint8_t *tzAltEndPtr = &net.config.timezones[1].endMinute + 5;
+    uint8_t *tzEndPtr = &net.config.timezones[0].endMinute + 5;
+    while (1)
     {
-        td -= temp;
-        year++;
-        temp = 365 + !(year & 3);
+        uint8_t tzAltEnd = *--tzAltEndPtr;
+        uint8_t tzEnd = *--tzEndPtr;
+        if (tzEnd < tzAltEnd)
+        {
+            break;
+        }
+        if (tzEnd > tzAltEnd || --cmpCnt == 0)
+        {
+            swapWord(tz, tzAlt);
+            break;
+        }
     }
-    disp[14] = year % 10;
-    disp[15] = year / 10;
     
-    uint8_t mon = 1;
-    uint8_t tmp = 31;
-    while (td >= tmp)
+    uint8_t minute, hour, dow, month, day, year;
+    while (1)
     {
-        if (mon == 2)
-            tmp = temp - 365 + 28;
+        uint16_t offset = ((uint8_t)(tz->offsetHour * 15) << 2) + tz->offsetMinute;
+        uint32_t x = tmm;
+        if (tz->offsetAdd)
+        {
+            asm (
+                "add %A0, %A1 \n"
+                "adc %B0, %B1 \n"
+                "adc %C0, __zero_reg__ \n"
+                "adc %D0, __zero_reg__ \n"
+                : "+r" (x)
+                : "r" (offset)
+            );
+        }
         else
         {
-            uint8_t x;
-            if (mon < 8)
-                x = mon;
-            else
-                x = ~mon;
-            tmp = 30 + (x & 1);
+            asm (
+                "sub %A0, %A1 \n"
+                "sbc %B0, %B1 \n"
+                "sbc %C0, __zero_reg__ \n"
+                "sbc %D0, __zero_reg__ \n"
+                : "+r" (x)
+                : "r" (offset)
+            );
         }
-        td -= tmp;
-        mon++;
+        
+        uint16_t tm = x % (24 * 60);
+        uint16_t td = x / (24 * 60);
+        dow = (td + 5) % 7 + 1;
+
+        //uint32_t y = (uint24_t)td << 2;
+        //year = y / 1461;
+        //td = y % 1461;
+        //td >>= 2;
+        
+        year = 0;
+        uint16_t temp16;
+        while (1)
+        {
+            asm (
+                "ldi %A0, lo8(366) \n"
+                "ldi %B0, hi8(366) \n"
+                "sbrs %1, 0 \n"
+                "sbrc %1, 1 \n"
+                "ldi %A0, lo8(365) \n"
+                : "=d"(temp16)
+                : "r"(year)
+            );
+            if (td < temp16)
+                break;
+            td -= temp16;
+            year++;
+        }
+        
+        month = 1;
+        uint8_t temp8;
+        while (1)
+        {
+            if (month == 2)
+                temp8 = temp16 - 365 + 28;
+            else
+            {
+                uint8_t m = month;
+                if (m & 0x08)
+                    m = ~m;
+                temp8 = (m & 1) + 30;
+            }
+            if (td < temp8)
+                break;
+            td -= temp8;
+            month++;
+        }
+        day = td;
+        
+        //uint8_t leap = !(year & 3);
+        //if (days > 58 + leap)
+        //    days = days + 2 - leap;
+        //if (year & 3)
+        //{
+        //    if (days > 58)
+        //        days += 2;
+        //}
+        //else
+        //{
+        //    if (days > 59)
+        //        days += 1;
+        //}
+        //
+        //uint8_t mon = (uint16_t)(days * 12) / 367;
+        //uint8_t day = days - (uint16_t)(mon * 367) / 12;
+        
+        uint8_t d = day + 7;
+        uint8_t endWeek = tz->endWeek;
+        uint8_t week = 5;
+        R_REG(week);
+        if (endWeek < 5 || d < temp8)
+            week = d / 7;
+        
+        minute = tm % 60;
+        hour = tm / 60;
+        
+        if (month < tz->endMonth) break;
+        if (month == tz->endMonth)
+        {
+            if (week < endWeek) break;
+            if (week == endWeek)
+            {
+                if (dow < tz->endDow) break;
+                if (dow == tz->endDow)
+                {
+                    if (hour < tz->endHour) break;
+                    if (hour == tz->endHour)
+                    {
+                        if (minute < tz->endMinute) break;
+                    }
+                }
+            }
+        }
+        if (--cnt == 0) break;
+        swapWord(tz, tzAlt);
     }
-    uint8_t day = td + 1;
     
-    //uint8_t leap = !(year & 3);
-    //if (days > 58 + leap)
-    //    days = days + 2 - leap;
-    //
-    //uint8_t mon = (uint16_t)(days * 12) / 367;
-    //uint8_t day = days - (uint16_t)(mon * 367) / 12;
-
-    disp[10] = day % 10;
-    disp[11] = day / 10;
-    uint8_t monthL = mon % 10;
-    disp[8] = monthL;
-    disp[9] = mon / 10;
-
-    return isDst(day, monthL, dow, hours);
-}
-
-static void displayTime(uint32_t tim)
-{
-    uint32_t ts = tim - SEC_OFFSET;//= (time + UTC_OFFSET * 3600);
-
-    if (ts > MAX_SEC)
-        ts = MAX_SEC;
-
-    uint16_t s = ts % 3600;
-    uint24_t th = ts / 3600;
-
-    // SECONDS
-    uint8_t seconds = s % 60;
-    disp[0] = seconds % 10;
-    disp[1] = seconds / 10;
-    // MINUTES
-    uint8_t minutes = s / 60;
-    disp[2] = minutes % 10;
-    disp[3] = minutes / 10;
-
-    //uint8_t minutes = tm % 60;
-    //uint32_t th = tm / 60;
-
-    //th += 1;//offset;
-
-    //uint8_t y = th / 8766;
-    //uint16_t z = th % 8766;
-    //
-    //uint16_t start = (uint16_t)START_DST + DSTlookup[(uint8_t)(y + 8) % 28];
-    //uint16_t end = (uint16_t)END_DST + DSTlookup[(uint8_t)y % 28];
-    //
-    //if (z >= start && z < end)
-    //    th++;
-    if(date(th))
-        date(th + 1);
+    net_t *netPtr = &net;
+    E_REG(netPtr);
+    
+    // (dayTime >= nightTime && (dayTime <= w || w < nightTime)) || (dayTime <= w && w < nightTime)
+    uint8_t temp;
+    asm volatile (
+        "ldi %0, %9 \n"
+        "cp %3, %5 \n"
+        "cpc %4, %6 \n"
+        "brcs cmp1_%= \n"
+        "cp %1, %3 \n"
+        "cpc %2, %4 \n"
+        "brcc day_%= \n"
+        "rjmp cmp2_%= \n"
+        "cmp1_%=:"
+        "cp %1, %3 \n"
+        "cpc %2, %4 \n"
+        "brcs night_%= \n"
+        "cmp2_%=:"
+        "cp %1, %5 \n"
+        "cpc %2, %6 \n"
+        "brcc night_%= \n"
+        "day_%=:"
+        "ldi %0, %8 \n"
+        "night_%=:"
+        "out %7, %0 \n"
+        : "=&d"(temp)
+        : "r"(minute), "r"(hour), "r"(netPtr->config.dayTime.minute), "r"(netPtr->config.dayTime.hour),
+        "r"(netPtr->config.nightTime.minute), "r"(netPtr->config.nightTime.hour), "I"(_SFR_IO_ADDR(TIMSK)),
+        "M"((1<<OCIE1A) | (1<<ICIE1) | (1<<TOIE0)), "M"((1<<OCIE1A) | (1<<ICIE1) | (1<<OCIE0A) | (1<<TOIE0))
+    );
+    
+    uint8_t *dispPtr = disp;
+    E_REG(dispPtr);
+    
+    //dispPtr[0] = second % 10; // ToDo
+    //dispPtr[1] = second / 10;
+    dispPtr[2] = minute % 10;
+    dispPtr[3] = minute / 10;
+    dispPtr[4] = hour % 10;
+    dispPtr[5] = hour / 10;
+    dispPtr[6] = dow;
+    
+    day++;
+    dispPtr[8] = month % 10;
+    dispPtr[9] = month / 10;
+    dispPtr[10] = day % 10;
+    dispPtr[11] = day / 10;
+    
+    dispPtr[14] = year % 10;
+    dispPtr[15] = year / 10;
 }
 
 static void checkPinChange()
@@ -233,20 +315,21 @@ static void eepromRead()
 {
     while (EECR & (1<<EEPE));
 
-    uint16_t c = 18;
-    uint8_t* ptr = &net.myMac[18];
+    uint8_t c = sizeof(config_t) - 1;
+    uint8_t* ptr = (uint8_t*)&net.config + sizeof(config_t);
     do
     {
-        EEAR = --c;
+        EEAR = c;
         EECR |= (1<<EERE);
         *--ptr = EEDR;
-    } while (c);
+    } while (--c != 0xFF);
 }
 
 static void eepromWrite(uint8_t p, uint8_t val)
 {
     while (EECR & (1<<EEPE));
 
+    EECR = 0; // ToDo: is this necessary?
     EEAR = p;
     EEDR = val;
     cli(); // ToDo
@@ -261,19 +344,55 @@ static void eepromWrite(uint8_t p, uint8_t val)
  *                                                                      *
  *----------------------------------------------------------------------*/
 
-//uint8_t ee[10] EEMEM = { MAC5,MAC4,MAC3,MAC2,MAC1,MAC0, 104,5,168,192 };
+// Initial configuration data (all addresses are least significant byte first)
+volatile config_t config EEMEM = {
+    .myMac = { 0x6B, 0x6C, 0x63, 0x50, 0x54, 0x4E },
+    .netmask = { 0, 0, 0, 0 }, // Obtain from DHCP
+    .gwIp = { 0, 0, 0, 0 }, // Obtain from DHCP
+    .myIp = { 0, 0, 0, 0 }, // Obtain from DHCP
+    .dstIp = { 17, 4, 130, 134 }, // timeserver.rwth-aachen.de
+    .nightTime = {
+        .minute = 0,
+        .hour = 22
+    },
+    .dayTime = {
+        .minute = 0,
+        .hour = 7
+    },
+    .timezones = {
+        {
+            .endMinute = 0,
+            .endHour = 3,
+            .endDow = 7,
+            .endWeek = 5,
+            .endMonth = 10,
+            .offsetMinute = 0,
+            .offsetHour = 2,
+            .offsetAdd = 1
+        }, // CEST
+        {
+            .endMinute = 0,
+            .endHour = 2,
+            .endDow = 7,
+            .endWeek = 5,
+            .endMonth = 3,
+            .offsetMinute = 0,
+            .offsetHour = 1,
+            .offsetAdd = 1
+        } // CET
+    }
+};
 
 int main()
 {
-    // ToDo: use sbi when configuring registers
 #ifdef __AVR_ATtiny4313__
-    DISP_CS_PORT = (1<<CS);
+    DISP_CS_PORT |= (1<<CS);
     DISP_CS_DDR = (1<<CS) | DISP_SEL | DISP_SEG;
 
     MAIN_PORT = (1<<SW_1) | (1<<SW_2) | (1<<PWR_SENSE);
     MAIN_DDR = (1<<LED) | (1<<SPI_SI) | (1<<SPI_SCK);
     
-    ACSR = (1<<ACD);
+    ACSR |= (1<<ACD);
     PRR = (1<<PRUSI) | (1<<PRUSART);
 
     TCCR0A = (1<<CS01) | (1<<CS00);
@@ -332,134 +451,110 @@ int main()
 
     while (1)
     {
-    init();
-    enc28j60Init(&net.myMac[6]);
-
-    uint8_t old;
-    uint16_t NextPacketPtr = RXSTART_INIT;
-    uint8_t st = 1;
-    R_REG(st);
-    if (!(flag & USE_DHCP))
-        st = 4;
-    while (1)
-    {
-        //if (!enc28j60LinkUp())
-        //{
-        //    state = 0;
-        //    tim = 0;
-        //    while (!enc28j60LinkUp());
-        //    C8(x, 1);
-        //    state = x;
-        //}
-
-        //uint8_t test0 = PINA;
-        //uint8_t test1 = PINA;
-        //uint8_t test2 = PINA;
-        //uint8_t test3 = PINA;
-        //uint8_t test4 = PINA;
-        //uint8_t test5 = PINA;
-        //uint8_t test6 = PINA;
-        //uint8_t test7 = PINA;
-
-
-        if (enc28j60LinkUp())
+        uint8_t *ptr = (uint8_t*)&net + 6;
+        uint8_t c = 6;
+        R_REG(c);
+        do
         {
-            loop(&st, &NextPacketPtr);
-            state = st;
-        }
-        else
+            *--ptr = 0;
+        } while (--c);
+
+        netInit();
+
+        uint16_t NextPacketPtr = RXSTART_INIT;
+        uint8_t st = 1;
+        R_REG(st);
+        if (!(flag & (1<<USE_DHCP)))
+            st = 4;
+        while (1)
         {
-            st = 1;
-            R_REG(st);
-            if (!(flag & USE_DHCP))
-                st = 4;
-            state = 0;
-            net.retryTime = 0;
-            retryCount = 5;
-        }
-
-        //while (PIND & (1<<LED)); // ToDo: test buffer overflow
-        //PINA = test0;
-        //PINA = test1;
-        //PINA = test2;
-        //PINA = test3;
-        //PINA = test4;
-        //PINA = test5;
-        //PINA = test6;
-        //PINA = test7;
-
-        checkPinChange();
-        
-        if (TIFR & (1<<OCF1B))
-        {
-            old = MAIN_PIN;
-
-            if (!(old & (1<<SW_1)))
+            if (enc28j60LinkUp())
             {
-                if (!(old & (1<<SW_2)))
-                    break;
-                else
-                    page = 6;
+                netLoop(&st, &NextPacketPtr);
+                state = st;
             }
-            else if (!(old & (1<<SW_2)))
-                page = 12;
             else
-                page = 0;
+            {
+                st = 1;
+                R_REG(st);
+                if (!(flag & (1<<USE_DHCP)))
+                    st = 4;
+                state = 0;
+                net.retryTime = 0;
+                retryCount = 5;
+            }
+
+            checkPinChange();
+
+            if (TIFR & (1<<OCF1B))
+            {
+                uint8_t btn = MAIN_PIN;
+
+                uint8_t p = 12;
+                R_REG(p);
+                if (!(btn & (1<<SW_1)))
+                {
+                    if (!(btn & (1<<SW_2)))
+                        break;
+                    else
+                        p = 6;
+                }
+                else if (btn & (1<<SW_2))
+                    p = 0;
+                page = p;
+            }
         }
-    }
-    page = 18;
+        page = 18;
 
-    uint8_t addr = 18;
-    uint8_t dig1 = 0, dig2 = 0, dig3 = 0;//, val = 0;
-    uint8_t pos = 0;
+        uint8_t addr = 0;
+        uint8_t dig1 = 0, dig2 = 0, dig3 = 0;
+        uint8_t pos = 0;
+        uint8_t old = 0;
+        uint8_t btn = (1<<SW_1);
 
-    while (1)
-    {
-        checkPinChange();
-
-        if (TIFR & (1<<OCF1B))
+        while (1)
         {
-            uint8_t new = MAIN_PIN;
-            uint8_t btn = old & ~new;
-            old = new;
-
             if (btn & (1<<SW_1))
             {
                 if (pos == 0)
                 {
-                    uint8_t newVal = dig1;
-                    newVal *= 10;
-                    newVal += dig2;
-                    newVal *= 10;
-                    newVal += dig3;
-
-                    uint8_t* ptr = &net.myMac[0] + addr;
-                    uint8_t val = *ptr;
-                    if (val != newVal)
+                    uint8_t* ptr = (uint8_t*)&net.config + sizeof(config_t) - 1;
+                    E_REG(ptr);
+                    ptr -= addr;
+                    
+                    if (addr)
                     {
-                        *ptr = newVal;
-                        eepromWrite(addr, newVal);
+                        uint8_t newVal = dig1;
+                        newVal *= 10;
+                        newVal += dig2;
+                        newVal *= 10;
+                        newVal += dig3;
+                        uint8_t oldVal = *(ptr + 1);
+                        if (oldVal != newVal)
+                        {
+                            *(ptr + 1) = newVal;
+                            eepromWrite(addr, newVal);
+                        }
                     }
-
-                    val = *--ptr;// ToDo: ld -Z
+                    
+                    uint8_t val = *ptr;
                     dig1 = val / 100;
                     val %= 100;
                     dig2 = val / 10;
                     dig3 = val % 10;
                     
-                    if (addr == 0) // ToDo
+                    disp[19] = addr / 10;
+                    disp[18] = addr % 10;
+                    addr++;
+                    if (addr == sizeof(config_t))
                         break;
-                    addr--;
-                    uint8_t a = 17 - addr;
-                    disp[19] = a / 10;//addr >> 2;
-                    disp[18] = a % 10;// & 3;
                 }
                 else if (pos == 1)
                 {
                     dig1++;
                     if (dig1 > 2)
                         dig1 = 0;
-                    else if (dig1 == 2 && (uint8_t)((dig2 << 4) | (dig2 >> 4) | dig3) > 0x55)//val > 55)
+                    else if ((uint24_t)DWORD(dig3, dig2, dig1, 0) > 0x020505)
                     {
                         dig2 = 0;
                         dig3 = 0;
@@ -486,24 +581,31 @@ int main()
                         dig3 = 0;
                 }
             }
+            uint8_t *dispPtr = disp;
+            E_REG(dispPtr);
             if (btn & (1<<SW_2))
             {
                 pos++;
                 pos &= 3;
-                uint8_t p;
-                if (pos == 0)
-                    p = 10;
-                else
+                uint8_t p = 10;
+                R_REG(p);
+                if (pos != 0)
                     p = pos;
-
-                disp[23] = p;
-                    
+                dispPtr[23] = p;
             }
-            disp[20] = dig3;
-            disp[21] = dig2;
-            disp[22] = dig1;
+            dispPtr[20] = dig3;
+            dispPtr[21] = dig2;
+            dispPtr[22] = dig1;
+            
+            do
+            {
+                checkPinChange();
+            } while (!(TIFR & (1<<OCF1B)));
+            
+            uint8_t new = MAIN_PIN;
+            btn = old & ~new;
+            old = new;
         }
-    }
     }
 }
 
@@ -513,7 +615,7 @@ int main()
  *                                                                      *
  *----------------------------------------------------------------------*/
 
-// ToDo: ISR_NOBLOCK
+// ToDo: disable ICIE1 before sei() to avoid potential recursive entry
 //ISR(TIMER1_COMPA_vect, ISR_NOBLOCK)
 ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 {
@@ -523,7 +625,7 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
     E_REG(ptr);
     
     if (ptr->leaseTime)
-    ptr->leaseTime--;
+        ptr->leaseTime--;
 
     if (ptr->syncTime)
         ptr->syncTime--;
@@ -531,9 +633,8 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
     if (ptr->retryTime)
         ptr->retryTime--;
     
-    if (flag & TIME_OK)
+    if (flag & (1<<TIME_OK))
     {
-        //test();
         uint32_t t = ptr->time + 1;
         ptr->time = t;
         R_REG(t);
@@ -545,10 +646,11 @@ ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
 ISR(TIMER1_COMPA_vect, ISR_NAKED)
 {
     asm volatile (
-        "sbi %0, %1 \n"
+        "sbis %0, %1 \n"
+        "sbi %2, %3 \n"
         "reti \n"
         :
-        : "I"(_SFR_IO_ADDR(MAIN_PORT)), "I"(LED)
+        : "I"(_SFR_IO_ADDR(flag)), "I"(SYNC_ERROR), "I"(_SFR_IO_ADDR(MAIN_PORT)), "I"(LED)
     );
 }
 
@@ -572,7 +674,7 @@ ISR(TIMER0_OVF_vect)
 
 #ifdef __AVR_ATtiny4313__
     uint8_t d = ptr[p];
-    c |= (d << 4) | (d >> 4);
+    c |= (d << 4) | (d >> 4); // ToDo: ensure d is never greater than 15
     if (DISP_CS_PORT & (1<<CS))
         c |= (1<<CS);
     DISP_CS_PORT = c; 

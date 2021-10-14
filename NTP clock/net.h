@@ -16,23 +16,46 @@
 #include "config.h"
 #include "enc28j60.h"
 
-extern void loop(uint8_t* state, uint16_t* NextPacketPtr);
-extern void init();
-//extern void tick();
+typedef struct
+{
+    uint8_t minute;
+    uint8_t hour;
+} hmtime_t;
+
+typedef struct
+{
+    uint8_t endMinute;
+    uint8_t endHour;
+    uint8_t endDow;
+    uint8_t endWeek;
+    uint8_t endMonth;
+    uint8_t offsetMinute;
+    uint8_t offsetHour;
+    uint8_t offsetAdd;
+} timezone_t;
+
+typedef struct
+{
+    uint8_t myMac[6];
+    uint8_t netmask[4];
+    uint8_t gwIp[4];
+    uint8_t myIp[4];
+    uint8_t dstIp[4];
+    hmtime_t nightTime;
+    hmtime_t dayTime;
+    timezone_t timezones[2];
+} config_t;
 
 typedef struct
 {
     uint16_t leaseTime;
     uint16_t syncTime;
     uint16_t retryTime;
+    uint32_t time;
     uint8_t timestamp[6];
     uint8_t arpReplyMac[6];
     uint8_t dstMac[6];
-    uint8_t myMac[6];
-    uint8_t myIpInit[4];
-    uint8_t arpIpInit[4];
-    uint8_t dstIp[4];
-    uint32_t time;
+    config_t config;
     uint8_t myIp[4];
     uint8_t gwIp[4];
     uint8_t netmask[4];
@@ -45,7 +68,9 @@ typedef struct
     //uint8_t flag;
 } net_t;
 
-extern net_t net; // ToDo: __attribute__((section(".noinit")));
+extern net_t net;
+extern void netLoop(uint8_t* state, uint16_t* NextPacketPtr);
+extern void netInit();
 
 #ifdef __AVR_ATtiny4313__
 //#define retryTime GPIOR2
@@ -57,10 +82,10 @@ extern net_t net; // ToDo: __attribute__((section(".noinit")));
 #define flag TWAR
 #endif
 
-#define ARP_REPLY (1<<0)
-#define TIME_OK (1<<1)
-#define SYNC_ERROR (1<<2)
-#define USE_DHCP (1<<3)
+#define ARP_REPLY   0
+#define TIME_OK     1
+#define SYNC_ERROR  2
+#define USE_DHCP    3
 
 #define CRC_LEN 4
 

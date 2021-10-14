@@ -21,27 +21,7 @@
 #define SCK_HI  MAIN_PORT |= (1<<SPI_SCK)
 #define SCK_LO  MAIN_PORT &= ~(1<<SPI_SCK)
 
-#ifndef __AVR_ATtiny4313__
-void tx(uint8_t data)
-{
-    while (!(UCSRA & (1<<UDRE)));
-    UDR = data;
-}
-
-void txHex(uint8_t data)
-{
-    uint8_t hi = (data >> 4) + '0';
-    if (hi > '9')
-    hi += 'A' - '9' - 1;
-    tx(hi);
-    uint8_t lo = (data & 0xF) + '0';
-    if (lo > '9')
-    lo += 'A' - '9' - 1;
-    tx(lo);
-}
-#endif
-
-static uint8_t spiTransfer(uint8_t data)
+uint8_t spiTransfer(uint8_t data)
 {
     uint8_t i = 8;
     do
@@ -58,7 +38,7 @@ static uint8_t spiTransfer(uint8_t data)
     return data;
 }
 
-static uint8_t spiTransferZero()
+uint8_t spiTransferZero()
 {
     return spiTransfer(0);
 }
@@ -223,7 +203,14 @@ void enc28j60Init(uint8_t* myMac)
     for (uint8_t c = ENC28J60_WRITE_CTRL_REG | (B3_MAADR1 + 5); c >= (ENC28J60_WRITE_CTRL_REG | B3_MAADR1); c--)
     {
         Y_REG(myMac);
-        enc28j60WriteOp(c ^ 1, *--myMac);
+        uint8_t addr;
+        asm (
+            "ldi %0, 1 \n"
+            "eor %0, %1 \n"
+            : "=d"(addr)
+            : "r"(c)
+        );
+        enc28j60WriteOp(addr, *--myMac);
     }
 
     // half duplex mode
@@ -237,18 +224,6 @@ void enc28j60Init(uint8_t* myMac)
 
     // enable packet reception
     enc28j60BitFieldSet(ECON1, ECON1_RXEN);
-}
-
-#ifdef __AVR_ATtiny4313__
-inline __attribute__((always_inline))
-#endif
-uint8_t enc28j60ReadByte()
-{
-    uint8_t data = spiTransferZero();
-#ifndef __AVR_ATtiny4313__
-    txHex(data);
-#endif
-    return data;
 }
 
 uint8_t enc28j60PacketReceived()
@@ -326,47 +301,17 @@ void enc28j60EndRead(uint16_t* NextPacketPtr)
     // However, compensate for the errata point 13, rev B4: never write an even address!
     // gNextPacketPtr is always an even address if RXSTOP_INIT is odd.
     // RXSTART_INIT is zero, no test for gNextPacketPtr less than RXSTART_INIT.
-    //if (NextPacketPtr -1 > RXSTOP_INIT)
-    if (*NextPacketPtr > RXSTOP_INIT + 1)
+    uint16_t rxPtr = RXSTOP_INIT;
+    R_REG(rxPtr);
+    if (*NextPacketPtr - 1 < rxPtr)
     {
-        enc28j60Write(B0_ERXRDPTL, (RXSTOP_INIT)&0xFF);
-        enc28j60Write(B0_ERXRDPTH, (RXSTOP_INIT)>>8);
+        rxPtr = *NextPacketPtr - 1;
     }
-    else
-    {
-        enc28j60Write(B0_ERXRDPTL, (*NextPacketPtr-1)&0xFF);
-        enc28j60Write(B0_ERXRDPTH, (*NextPacketPtr-1)>>8);
-    }
+    enc28j60Write(B0_ERXRDPTL, rxPtr&0xFF);
+    enc28j60Write(B0_ERXRDPTH, rxPtr>>8);
 
     // decrement the packet counter indicate we are done with this packet
     enc28j60BitFieldSet(ECON2, ECON2_PKTDEC);
-
-#ifndef __AVR_ATtiny4313__
-    tx('\r');
-    tx('\n');
-#endif
-}
-
-#ifdef __AVR_ATtiny4313__
-inline __attribute__((always_inline))
-#endif
-void enc28j60WriteByte(uint8_t data)
-{
-    spiTransfer(data);
-#ifndef __AVR_ATtiny4313__
-    txHex(data);
-#endif
-}
-
-#ifdef __AVR_ATtiny4313__
-inline __attribute__((always_inline))
-#endif
-void enc28j60WriteZero()
-{
-    spiTransferZero();
-#ifndef __AVR_ATtiny4313__
-    txHex(0);
-#endif
 }
 
 void enc28j60WritePacket(uint16_t txnd)//len)
@@ -404,10 +349,6 @@ void enc28j60WritePacket(uint16_t txnd)//len)
     //enc28j60WriteOp(ENC28J60_WRITE_BUF_MEM, 0, 0x00);
     spiTransferZero(); // ToDo
     //enc28j60WriteByte(0);
-
-#ifndef __AVR_ATtiny4313__
-    tx('\t');
-#endif
 }
 
 void enc28j60EndWrite()
@@ -417,11 +358,6 @@ void enc28j60EndWrite()
 
     // send the contents of the transmit buffer onto the network
     enc28j60BitFieldSet(ECON1, ECON1_TXRTS);
-    
-#ifndef __AVR_ATtiny4313__
-    tx('\r');
-    tx('\n');
-#endif
 }
 
 uint8_t enc28j60LinkUp()

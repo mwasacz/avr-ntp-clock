@@ -259,15 +259,10 @@ extern void enc28j60Init(uint8_t* myMac);
 extern uint8_t enc28j60LinkUp();
 extern uint8_t enc28j60PacketReceived();
 extern uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr);
-extern uint8_t enc28j60ReadByte();
 extern void enc28j60EndRead(uint16_t* NextPacketPtr);
 extern void enc28j60WritePacket(uint16_t txnd);
-extern void enc28j60WriteByte(uint8_t data);
-extern void enc28j60WriteZero();
 extern void enc28j60EndWrite();
-#ifndef __AVR_ATtiny4313__
-extern void tx(uint8_t data);
-extern void txHex(uint8_t data);
-#endif
+extern uint8_t spiTransfer(uint8_t data);
+extern uint8_t spiTransferZero();
 
 #endif /* ENC28J60_H */

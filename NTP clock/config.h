@@ -15,6 +15,8 @@
 #ifdef __AVR_ATmega16__
 #define EEPE EEWE
 #define EEMPE EEMWE
+#define ICIE1 TICIE1
+#define OCIE0A OCIE0
 #else
 #error "Unsupported device"
 #endif
