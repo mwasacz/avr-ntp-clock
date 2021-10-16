@@ -10,7 +10,6 @@
 #define ENC28J60_H
 
 #include <avr/io.h>
-#include <util/delay.h>
 #include "config.h"
 
 // ENC28J60 Control Registers

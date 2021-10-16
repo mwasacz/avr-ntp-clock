@@ -15,11 +15,10 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-//#include <avr/sleep.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
-#include "net.h"
 #include "config.h"
+#include "net.h"
 
 #define SEC_OFFSET 3155673600
 #define MAX_SEC 3155760000
@@ -40,7 +39,12 @@ const __flash uint8_t font[] = {
     0xF8,    // 7
     0x80,    // 8
     0x90,    // 9
-    0xFF,    // -
+    0xFF,    // Blank
+    0xFF,    // Blank
+    0xFF,    // Blank
+    0xFF,    // Blank
+    0xFF,    // Blank
+    0xFF     // Blank
 };
 #endif
 
@@ -48,15 +52,38 @@ const __flash uint8_t font[] = {
  *  VARIABLES                                                           *
  *----------------------------------------------------------------------*/
 
-//                         SEC  MIN  HOUR WEEK  MON  DAY  STATE YEAR     MENU          PAGE CNT
-static uint8_t disp[26] = {0,0, 0,0, 0,0, 6,10, 1,0, 1,0, 0,10, 0,0,0,2, 0,0,0,0,0,10, 0,1};
-//                   CNT   1 2  3 4  5 6  1 2   3 4  5 6  1 2   3 4 5 6
-//                   PAGE  0 0  0 0  0 0  1 1   1 1  1 1  2 2   2 2 2 2
-#define state disp[12]
-#define page disp[24]
-#define dispPage 24
-#define dispCnt 25
-//static uint8_t page = 0;//12;
+typedef struct
+{
+    uint8_t second[2];
+    uint8_t minute[2];
+    uint8_t hour[2];
+    uint8_t dow;
+    uint8_t blank0;
+    uint8_t month[2];
+    uint8_t day[2];
+    uint8_t state;
+    uint8_t blank1;
+    uint8_t year[4];
+    uint8_t menu[6];
+    uint8_t page;
+    uint8_t cnt;
+} disp_t;
+
+static disp_t disp = {
+    .second = { 0, 0 },
+    .minute = { 0, 0 },
+    .hour = { 0, 0 },
+    .dow = 6,
+    .blank0 = 15,
+    .month = { 1, 0 },
+    .day = { 1, 0 },
+    .state = 0,
+    .blank1 = 15,
+    .year = { 0, 0, 0, 2 },
+    .menu = { 0, 0, 0, 0, 0, 10 },
+    .page = 0,
+    .cnt = 1
+};
 
 /*----------------------------------------------------------------------*
  *                                                                      *
@@ -87,9 +114,6 @@ static void displayTime(uint32_t ts)
 
     uint8_t second = ts % 60;
     uint32_t tmm = ts / 60;
-
-    disp[0] = second % 10;
-    disp[1] = second / 10;
     
     timezone_t *tzAlt = &net.config.timezones[1];
     timezone_t *tz = &net.config.timezones[0];
@@ -149,37 +173,46 @@ static void displayTime(uint32_t ts)
         uint16_t td = x / (24 * 60);
         dow = (td + 5) % 7 + 1;
 
-        //uint32_t y = (uint24_t)td << 2;
-        //year = y / 1461;
-        //td = y % 1461;
-        //td >>= 2;
+        uint24_t y = DWORD(L(td), H(td), 0, 0);
+        y <<= 2;
+        uint32_t z = y;
+        year = z / 1461;
+        td = z % 1461;
+        td >>= 2;
         
-        year = 0;
-        uint16_t temp16;
-        while (1)
-        {
-            asm (
-                "ldi %A0, lo8(366) \n"
-                "ldi %B0, hi8(366) \n"
-                "sbrs %1, 0 \n"
-                "sbrc %1, 1 \n"
-                "ldi %A0, lo8(365) \n"
-                : "=d"(temp16)
-                : "r"(year)
-            );
-            if (td < temp16)
-                break;
-            td -= temp16;
-            year++;
-        }
+        //year = 0;
+        //uint16_t temp16;
+        //while (1)
+        //{
+        //    asm (
+        //        "ldi %A0, lo8(366) \n"
+        //        "ldi %B0, hi8(366) \n"
+        //        "sbrs %1, 0 \n"
+        //        "sbrc %1, 1 \n"
+        //        "ldi %A0, lo8(365) \n"
+        //        : "=d"(temp16)
+        //        : "r"(year)
+        //    );
+        //    if (td < temp16)
+        //        break;
+        //    td -= temp16;
+        //    year++;
+        //}
         
         month = 1;
         uint8_t temp8;
         while (1)
         {
-            if (month == 2)
-                temp8 = temp16 - 365 + 28;
-            else
+            //temp8 = temp16 - 365 + 28;
+            asm (
+                "ldi %0, 29 \n"
+                "sbrs %1, 0 \n"
+                "sbrc %1, 1 \n"
+                "ldi %0, 28 \n"
+                : "=d"(temp8)
+                : "r"(year)
+            );
+            if (month != 2)
             {
                 uint8_t m = month;
                 if (m & 0x08)
@@ -270,45 +303,44 @@ static void displayTime(uint32_t ts)
         : "=&d"(temp)
         : "r"(minute), "r"(hour), "r"(netPtr->config.dayTime.minute), "r"(netPtr->config.dayTime.hour),
         "r"(netPtr->config.nightTime.minute), "r"(netPtr->config.nightTime.hour), "I"(_SFR_IO_ADDR(TIMSK)),
-        "M"((1<<OCIE1A) | (1<<ICIE1) | (1<<TOIE0)), "M"((1<<OCIE1A) | (1<<ICIE1) | (1<<OCIE0A) | (1<<TOIE0))
+        "M"((1<<OCIE1A) | (1<<OCIE1B) | (1<<TOIE0)), "M"((1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<TOIE0))
     );
     
-    uint8_t *dispPtr = disp;
+    disp_t *dispPtr = &disp;
     E_REG(dispPtr);
     
-    //dispPtr[0] = second % 10; // ToDo
-    //dispPtr[1] = second / 10;
-    dispPtr[2] = minute % 10;
-    dispPtr[3] = minute / 10;
-    dispPtr[4] = hour % 10;
-    dispPtr[5] = hour / 10;
-    dispPtr[6] = dow;
+    dispPtr->second[0] = second % 10;
+    dispPtr->second[1] = second / 10;
+    dispPtr->minute[0] = minute % 10;
+    dispPtr->minute[1] = minute / 10;
+    dispPtr->hour[0] = hour % 10;
+    dispPtr->hour[1] = hour / 10;
+    dispPtr->dow = dow;
     
     day++;
-    dispPtr[8] = month % 10;
-    dispPtr[9] = month / 10;
-    dispPtr[10] = day % 10;
-    dispPtr[11] = day / 10;
+    dispPtr->month[0] = month % 10;
+    dispPtr->month[1] = month / 10;
+    dispPtr->day[0] = day % 10;
+    dispPtr->day[1] = day / 10;
     
-    dispPtr[14] = year % 10;
-    dispPtr[15] = year / 10;
+    dispPtr->year[0] = year % 10;
+    dispPtr->year[1] = year / 10;
 }
 
-static void checkPinChange()
+static uint8_t debounce()
 {
-    // ToDo: consider alternative debouncing using 1ms TIMER0 and count to 10
+    uint8_t gifr = (1<<INTF0) | (1<<INTF1);
+    uint8_t deb = DEBOUNCE_CYCLES;
+    R_REG(gifr);
+    R_REG(deb);
     cli();
     if (GIFR & ((1<<INTF0) | (1<<INTF1)))
     {
-        GIFR = (1<<INTF0) | (1<<INTF1);
-        //sei(); // ToDo
-        uint16_t cnt = TCNT1 + 625;
-        if (cnt >= 62500)
-        cnt -= 62500;
-        OCR1B = cnt;
-        TIFR = (1<<OCF1B);
+        GIFR = gifr;
+        debounceCnt = deb;
     }
     sei();
+    return debounceCnt;
 }
 
 static void eepromRead()
@@ -329,7 +361,9 @@ static void eepromWrite(uint8_t p, uint8_t val)
 {
     while (EECR & (1<<EEPE));
 
-    EECR = 0; // ToDo: is this necessary?
+#ifdef __AVR_ATtiny4313__
+    EECR = 0;
+#endif
     EEAR = p;
     EEDR = val;
     cli(); // ToDo
@@ -386,7 +420,7 @@ volatile config_t config EEMEM = {
 int main()
 {
 #ifdef __AVR_ATtiny4313__
-    DISP_CS_PORT |= (1<<CS);
+    DISP_CS_PORT = (1<<CS) | DISP_SEL | DISP_SEG;
     DISP_CS_DDR = (1<<CS) | DISP_SEL | DISP_SEG;
 
     MAIN_PORT = (1<<SW_1) | (1<<SW_2) | (1<<PWR_SENSE);
@@ -394,24 +428,14 @@ int main()
     
     ACSR |= (1<<ACD);
     PRR = (1<<PRUSI) | (1<<PRUSART);
+    
+    MCUCR = (1<<ISC10) | (1<<ISC00);
 
-    TCCR0A = (1<<CS01) | (1<<CS00);
-    OCR0A = 127;
+    OCR0A = BRIGHTNESS_N;
+    TCCR0B = (1<<CS01) | (1<<CS00);
     //TCCR0A = (1<<WGM01);
     //OCR0A = 207;
     //OCR0B = 103;
-    
-    TCCR1B = (1<<CS12) | (1<<WGM13) | (1<<WGM12);
-    ICR1 = 46874;
-    OCR1A = 23436;
-    //TCCR1B = (1<<CS12) | (1<<WGM12);
-    //OCR1A = 46874;
-    //OCR1B = 23436;
-    
-    MCUCR = (1<<ISC10) | (1<<ISC00);
-    
-    TIMSK = (1<<OCIE1A) | (1<<ICIE1) | (1<<TOIE0);
-    //TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<OCIE0B);
 #else
     MAIN_PORT = (1<<TX) | (1<<SW_1) | (1<<SW_2) | (1<<CS);
     MAIN_DDR = (1<<LED) | (1<<TX) | (1<<SPI_SI) | (1<<SPI_SCK) | (1<<CS);
@@ -422,28 +446,22 @@ int main()
     DISP_SEG_PORT = DISP_SEG;
     DISP_SEG_DDR = DISP_SEG;
     
-    ACSR = (1<<ACD);
-
-    // Timer config
-    TCCR0 = (1<<CS01) | (1<<CS00);
-    OCR0 = 127;
-    
-    TCCR1B = (1<<CS12) | (1<<WGM13) | (1<<WGM12);
-    ICR1 = 62499;
-    OCR1A = 31249;
-    //TCCR1B = (1<<CS12) | (1<<WGM12);
-    //OCR1A = 62499;
-    //OCR1B = 31249;
-    
-    TIMSK = (1<<OCIE1A) | (1<<TICIE1) | (1<<TOIE0);
-    
-    MCUCR = (1<<ISC10) | (1<<ISC00);
+    ACSR |= (1<<ACD);
     
     UCSRB = (1<<TXEN);
     UBRRL = 20;
-#endif
+    
+    MCUCR = (1<<ISC10) | (1<<ISC00);
 
-    // ToDo: check SW1,2_ISON and set page
+    OCR0 = BRIGHTNESS_N;
+    TCCR0 = (1<<CS01) | (1<<CS00);
+#endif
+    
+    OCR1A = TIMER_1S - 1;
+    OCR1B = TIMER_1S / 2 - 1;
+    TCCR1B = (1<<CS12) | (1<<WGM12);
+    
+    TIMSK = (1<<TOIE0);
     
     eepromRead();
 
@@ -451,42 +469,21 @@ int main()
 
     while (1)
     {
-        uint8_t *ptr = (uint8_t*)&net + 6;
-        uint8_t c = 6;
-        R_REG(c);
-        do
-        {
-            *--ptr = 0;
-        } while (--c);
+        // ToDo: set default display values
 
-        netInit();
+        netstate_t netstate;
+        netInit(&netstate);
+        
+        MAIN_PORT &= ~(1<<LED);
+        TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<TOIE0);
+        disp.page = 0;
 
-        uint16_t NextPacketPtr = RXSTART_INIT;
-        uint8_t st = 1;
-        R_REG(st);
-        if (!(flag & (1<<USE_DHCP)))
-            st = 4;
         while (1)
         {
-            if (enc28j60LinkUp())
-            {
-                netLoop(&st, &NextPacketPtr);
-                state = st;
-            }
-            else
-            {
-                st = 1;
-                R_REG(st);
-                if (!(flag & (1<<USE_DHCP)))
-                    st = 4;
-                state = 0;
-                net.retryTime = 0;
-                retryCount = 5;
-            }
-
-            checkPinChange();
-
-            if (TIFR & (1<<OCF1B))
+            netLoop(&netstate);
+            disp.state = netstate.state;
+            
+            if (debounce() == 0)
             {
                 uint8_t btn = MAIN_PIN;
 
@@ -501,10 +498,13 @@ int main()
                 }
                 else if (btn & (1<<SW_2))
                     p = 0;
-                page = p;
+                disp.page = p;
             }
         }
-        page = 18;
+
+        disp.page = 18;
+        TIMSK = (1<<TOIE0);
+        MAIN_PORT |= (1<<LED);
 
         uint8_t addr = 0;
         uint8_t dig1 = 0, dig2 = 0, dig3 = 0;
@@ -543,8 +543,8 @@ int main()
                     dig2 = val / 10;
                     dig3 = val % 10;
                     
-                    disp[19] = addr / 10;
-                    disp[18] = addr % 10;
+                    disp.menu[0] = addr % 10;
+                    disp.menu[1] = addr / 10;
                     addr++;
                     if (addr == sizeof(config_t))
                         break;
@@ -581,7 +581,7 @@ int main()
                         dig3 = 0;
                 }
             }
-            uint8_t *dispPtr = disp;
+            disp_t *dispPtr = &disp;
             E_REG(dispPtr);
             if (btn & (1<<SW_2))
             {
@@ -591,16 +591,13 @@ int main()
                 R_REG(p);
                 if (pos != 0)
                     p = pos;
-                dispPtr[23] = p;
+                dispPtr->menu[5] = p;
             }
-            dispPtr[20] = dig3;
-            dispPtr[21] = dig2;
-            dispPtr[22] = dig1;
+            dispPtr->menu[2] = dig3;
+            dispPtr->menu[3] = dig2;
+            dispPtr->menu[4] = dig1;
             
-            do
-            {
-                checkPinChange();
-            } while (!(TIFR & (1<<OCF1B)));
+            while (debounce());
             
             uint8_t new = MAIN_PIN;
             btn = old & ~new;
@@ -615,51 +612,33 @@ int main()
  *                                                                      *
  *----------------------------------------------------------------------*/
 
-// ToDo: disable ICIE1 before sei() to avoid potential recursive entry
-//ISR(TIMER1_COMPA_vect, ISR_NOBLOCK)
-ISR(TIMER1_CAPT_vect, ISR_NOBLOCK)
+// ToDo: disable OCIE1A before sei() to avoid potential recursive entry
+ISR(TIMER1_COMPA_vect, ISR_NOBLOCK)
 {
     MAIN_PORT &= ~(1<<LED);
     
-    net_t *ptr = &net;
-    E_REG(ptr);
-    
-    if (ptr->leaseTime)
-        ptr->leaseTime--;
-
-    if (ptr->syncTime)
-        ptr->syncTime--;
-    
-    if (ptr->retryTime)
-        ptr->retryTime--;
-    
-    if (flag & (1<<TIME_OK))
-    {
-        uint32_t t = ptr->time + 1;
-        ptr->time = t;
-        R_REG(t);
-        displayTime(t);
-    }
+    uint32_t time;
+    if (netTick(&time))
+        displayTime(time);
 }
 
-//ISR(TIMER1_COMPB_vect, ISR_NAKED)
-ISR(TIMER1_COMPA_vect, ISR_NAKED)
+ISR(TIMER1_COMPB_vect, ISR_NAKED)
 {
     asm volatile (
-        "sbis %0, %1 \n"
+        "sbic %0, %1 \n"
         "sbi %2, %3 \n"
         "reti \n"
         :
-        : "I"(_SFR_IO_ADDR(flag)), "I"(SYNC_ERROR), "I"(_SFR_IO_ADDR(MAIN_PORT)), "I"(LED)
+        : "I"(_SFR_IO_ADDR(flag)), "I"(SYNC_OK), "I"(_SFR_IO_ADDR(MAIN_PORT)), "I"(LED)
     );
 }
 
 ISR(TIMER0_OVF_vect)
-{
-    uint8_t* ptr = disp - 1;
+{    
+    uint8_t* ptr = (uint8_t*)&disp - 1;
     E_REG(ptr);
     
-    uint8_t c = ptr[dispCnt + 1];
+    uint8_t c = ptr[offsetof(disp_t, cnt) + 1];
     c--;
     if (c == 0)
 #ifdef __AVR_ATtiny4313__
@@ -667,9 +646,9 @@ ISR(TIMER0_OVF_vect)
 #else
         c = 4;
 #endif
-    ptr[dispCnt + 1] = c;
+    ptr[offsetof(disp_t, cnt) + 1] = c;
     
-    uint8_t p = ptr[dispPage + 1];
+    uint8_t p = ptr[offsetof(disp_t, page) + 1];
     p += c;
 
 #ifdef __AVR_ATtiny4313__
@@ -685,6 +664,11 @@ ISR(TIMER0_OVF_vect)
     DISP_SEL_PORT = (~(1 << (c - 1)) & DISP_SEL) | (1<<SW_DISP_SEL);
     DISP_SEG_PORT = font[ptr[p]];
 #endif
+
+    uint8_t cnt = debounceCnt;
+    if (cnt)
+        cnt--;
+    debounceCnt = cnt;
 }
 
 #ifdef __AVR_ATtiny4313__
@@ -700,7 +684,7 @@ ISR(TIMER0_COMPA_vect, ISR_NAKED)
         "pop %0 \n"
         "reti \n"
         : "=d"(x)
-        : "I"(_SFR_IO_ADDR(DISP_CS_PORT)), "I"(CS), "M"(10 << 4)
+        : "I"(_SFR_IO_ADDR(DISP_CS_PORT)), "I"(CS), "M"(DISP_SEL | DISP_SEG)
     );
 }
 #else

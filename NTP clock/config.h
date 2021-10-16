@@ -15,14 +15,12 @@
 #ifdef __AVR_ATmega16__
 #define EEPE EEWE
 #define EEMPE EEMWE
-#define ICIE1 TICIE1
 #define OCIE0A OCIE0
+#define GTCCR SFIOR
 #else
 #error "Unsupported device"
 #endif
 #endif
-
-// ToDo: decide to use UAA or LAA
 
 #define MAIN_DDR        DDRD
 #define MAIN_PORT       PORTD
@@ -37,6 +35,10 @@
 
 #ifdef __AVR_ATtiny4313__
 
+#define F_CPU           12000000UL
+#define TIMER_1S        46875
+#define DEBOUNCE_CYCLES 7
+
 #define PWR_SENSE       1
 
 #define DISP_CS_DDR     DDRB
@@ -46,6 +48,10 @@
 #define DISP_SEG        0xF0
 
 #else
+
+#define F_CPU           16000000UL
+#define TIMER_1S        62500
+#define DEBOUNCE_CYCLES 10
 
 #define TX              1
 #define CS              7
@@ -61,6 +67,8 @@
 #define SW_DISP_SEL     4
 
 #endif
+
+#define BRIGHTNESS_N    127
 
 #define H(x) ((x)>>8)
 #define L(x) ((x)&0xFF)
