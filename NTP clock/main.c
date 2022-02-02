@@ -132,16 +132,21 @@ int main()
     
     MCUCR = (1<<ISC10) | (1<<ISC00);
 
-    OCR0A = TIMER_DISP_D;
-    OCR0B = TIMER_DISP_N;
-    TCCR0A = (1<<WGM01);
+    OCR0A = TIMER_DISP_N - 1;
+#if TIMER_DISP_D < 256
+    OCR0B = TIMER_DISP_D - 1;
+#endif
     TCCR0B = (1<<CS01) | (1<<CS00);
     
     OCR1A = TIMER_1S - 1;
     OCR1B = TIMER_1S / 2 - 1;
     TCCR1B = (1<<CS12) | (1<<WGM12);
-    
-    TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<OCIE0B);
+
+#if TIMER_DISP_D < 256
+    TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<OCIE0B) | (1<<TOIE0);
+#else
+    TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<TOIE0);
+#endif
     
 #else
 
@@ -161,7 +166,7 @@ int main()
     
     MCUCR = (1<<ISC10) | (1<<ISC00);
 
-    OCR0 = TIMER_DISP_N;
+    OCR0 = TIMER_DISP_N - 1;
     TCCR0 = (1<<CS01) | (1<<CS00);
     
     OCR1A = TIMER_1S - 1;

@@ -35,8 +35,8 @@
 #ifdef __AVR_ATtiny4313__
 
 #define F_CPU           12000000
-#define TIMER_DISP_D    207
-#define TIMER_DISP_N    103
+#define TIMER_DISP_D    256
+#define TIMER_DISP_N    128
 #define TIMER_1S        46875
 #define DEBOUNCE_CYCLES 7
 
@@ -51,7 +51,7 @@
 #else
 
 #define F_CPU           16000000
-#define TIMER_DISP_N    127
+#define TIMER_DISP_N    128
 #define TIMER_1S        62500
 #define DEBOUNCE_CYCLES 10
 

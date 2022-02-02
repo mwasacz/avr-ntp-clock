@@ -15,13 +15,8 @@ TIMER1_COMPB_vect:
     sbi _SFR_IO_ADDR(flag), BLINK_LED
     reti
 
-#ifdef __AVR_ATtiny4313__
-.global TIMER0_COMPA_vect
-TIMER0_COMPA_vect:
-#else
 .global TIMER0_OVF_vect
 TIMER0_OVF_vect:
-#endif
     push r0
     in r0, _SFR_IO_ADDR(SREG)
     push ZL
@@ -88,8 +83,8 @@ end:
     reti
 
 #ifdef __AVR_ATtiny4313__
-.global TIMER0_COMPB_vect
-TIMER0_COMPB_vect:
+.global TIMER0_COMPA_vect
+TIMER0_COMPA_vect:
 #else
 .global TIMER0_COMP_vect
 TIMER0_COMP_vect:
@@ -99,6 +94,12 @@ TIMER0_COMP_vect:
     sbis _SFR_IO_ADDR(page), SW_2
     sbic _SFR_IO_ADDR(page), SW_1
     reti
+#ifdef __AVR_ATtiny4313__
+#if TIMER_DISP_D < 256
+.global TIMER0_COMPB_vect
+TIMER0_COMPB_vect:
+#endif
+#endif
     push r24
 #ifdef __AVR_ATtiny4313__
     ldi r24, DISP_SEL | DISP_SEG
@@ -118,10 +119,12 @@ TIMER0_COMP_vect:
 .global TIMER1_COMPA_vect
 TIMER1_COMPA_vect:
     push r24
-#ifdef __AVR_ATtiny4313__
-    ldi r24, (1 << OCIE0A) | (1 << OCIE0B)
-#else
+#ifndef __AVR_ATtiny4313__
     ldi r24, (1 << OCIE0) | (1 << TOIE0)
+#elif TIMER_DISP_D < 256
+    ldi r24, (1 << OCIE0A) | (1 << OCIE0B) | (1 << TOIE0)
+#else
+    ldi r24, (1 << OCIE0A) | (1 << TOIE0)
 #endif
     out _SFR_IO_ADDR(TIMSK), r24
     sei
@@ -157,10 +160,12 @@ TIMER1_COMPA_vect:
     out _SFR_IO_ADDR(SREG), r0
     pop r0
     pop r1
-#ifdef __AVR_ATtiny4313__
-    ldi r24, (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << OCIE0B)
-#else
+#ifndef __AVR_ATtiny4313__
     ldi r24, (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0) | (1 << TOIE0)
+#elif TIMER_DISP_D < 256
+    ldi r24, (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << OCIE0B) | (1 << TOIE0)
+#else
+    ldi r24, (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0)
 #endif
     cli
     out _SFR_IO_ADDR(TIMSK), r24
