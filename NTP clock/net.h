@@ -12,92 +12,13 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "config.h"
+#include "common.h"
+#include "arithmetic.h"
 #include "enc28j60.h"
 
-typedef struct
-{
-    uint8_t minute;
-    uint8_t hour;
-} hmtime_t;
-
-typedef struct
-{
-    uint8_t endMinute;
-    uint8_t endHour;
-    uint8_t endDow;
-    uint8_t endWeek;
-    uint8_t endMonth;
-    uint8_t offsetMinute;
-    uint8_t offsetHour;
-    uint8_t offsetAdd;
-} timezone_t;
-
-typedef struct
-{
-    uint8_t myMac[6];
-    uint8_t netmask[4];
-    uint8_t gwIp[4];
-    uint8_t myIp[4];
-    uint8_t dstIp[4];
-    hmtime_t nightTime;
-    hmtime_t dayTime;
-    timezone_t timezones[2];
-} config_t;
-
-typedef struct
-{
-    uint16_t leaseTime;
-    uint16_t syncTime;
-    uint32_t time;
-    uint8_t timestamp[6];
-    uint8_t arpReplyMac[6];
-    uint8_t dstMac[6];
-    config_t config;
-    uint8_t myIp[4];
-    uint8_t gwIp[4];
-    uint8_t netmask[4];
-    uint8_t serverId[4];
-    uint8_t arpIp[4];
-    uint8_t arpReplyIp[4];
-    uint8_t xid[4];
-    uint16_t ipId;
-} net_t;
-
-typedef struct
-{
-    uint8_t retryCount;
-    uint8_t state;
-    uint16_t nextPacketPtr;
-} netstate_t;
-
-extern net_t net;
-extern uint8_t netTick(uint32_t* time);
+extern void netTick();
 extern void netLoop(netstate_t* netstate);
 extern void netInit(netstate_t* netstate);
-
-#ifdef __AVR_ATtiny4313__
-#define retryTime _SFR_IO16(_SFR_IO_ADDR(GPIOR1))
-#define retryTimeH GPIOR2
-#define retryTimeL GPIOR1
-#define flag GPIOR0
-#define debounceCnt PCMSK
-#else
-#define retryTime _SFR_IO16(_SFR_IO_ADDR(OCR2))
-#define retryTimeH TCNT2
-#define retryTimeL OCR2
-#define flag TWAR
-#define debounceCnt TWBR
-#endif
-
-#define ARP_REPLY   0
-#define TIME_OK     1
-#define SYNC_OK     2
-#define CUSTOM_IP   3
-
-#define RETRY_COUNT         5
-#define RETRY_TIMEOUT_SHORT 3 // ToDo: 15
-#define RETRY_TIMEOUT_LONG  15 // ToDo: 900
-#define SYNC_TIMEOUT        20 // ToDo: 3600
 
 #define CRC_LEN 4
 

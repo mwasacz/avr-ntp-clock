@@ -91,12 +91,18 @@ static void enc28j60WriteOp(uint8_t opAddr, uint8_t data)
     CS_HI;
 }
 
+static void enc28j60WriteOpZero(uint8_t opAddr)
+{
+    enc28j60WriteOp(opAddr, 0);
+}
+
 #define enc28j60Read(address)               enc28j60ReadOp(ENC28J60_READ_CTRL_REG | (address))
 #define enc28j60ReadMacMii(address)         enc28j60ReadOpMacMii(ENC28J60_READ_CTRL_REG | (address))
 
 #define enc28j60Write(address, data)        enc28j60WriteOp(ENC28J60_WRITE_CTRL_REG | (address), (data))
 #define enc28j60BitFieldSet(address, data)  enc28j60WriteOp(ENC28J60_BIT_FIELD_SET | (address), (data))
 #define enc28j60BitFieldClr(address, data)  enc28j60WriteOp(ENC28J60_BIT_FIELD_CLR | (address), (data))
+#define enc28j60WriteZero(address)          enc28j60WriteOpZero(ENC28J60_WRITE_CTRL_REG | (address))
 
 static void enc28j60SetBank(uint8_t address)
 {
@@ -118,7 +124,7 @@ static uint8_t enc28j60PhyReadL(uint8_t address)
     
     enc28j60SetBank(2);
     // quit reading
-    enc28j60Write(B2_MICMD, 0x00);
+    enc28j60WriteZero(B2_MICMD);
     
     // get low byte
     return enc28j60ReadMacMii(B2_MIRDL);
@@ -160,18 +166,23 @@ void enc28j60Init(uint8_t* myMac)
     // 16-bit transfers, must write low byte first
     // set receive buffer start address
     //NextPacketPtr = RXSTART_INIT;
-    enc28j60Write(B0_ERXSTL, RXSTART_INIT&0xFF);
-    enc28j60Write(B0_ERXSTH, RXSTART_INIT>>8);
+    STATIC_ASSERT((RXSTART_INIT&0xFF) == 0);
+    enc28j60WriteZero(B0_ERXSTL);
+    STATIC_ASSERT((RXSTART_INIT>>8) == 0);
+    enc28j60WriteZero(B0_ERXSTH);
     // set receive pointer address
-    enc28j60Write(B0_ERXRDPTL, RXSTART_INIT&0xFF);
-    enc28j60Write(B0_ERXRDPTH, RXSTART_INIT>>8);
+    STATIC_ASSERT((RXSTART_INIT&0xFF) == 0);
+    enc28j60WriteZero(B0_ERXRDPTL);
+    STATIC_ASSERT((RXSTART_INIT>>8) == 0);
+    enc28j60WriteZero(B0_ERXRDPTH);
     // set receive buffer end
     // ERXND defaults to 0x1FFF (end of ram)
     enc28j60Write(B0_ERXNDL, RXSTOP_INIT&0xFF);
     enc28j60Write(B0_ERXNDH, RXSTOP_INIT>>8);
     // set transmit buffer start
     // ETXST defaults to 0x0000 (beginning of ram)
-    enc28j60Write(B0_ETXSTL, TXSTART_INIT&0xFF);
+    STATIC_ASSERT((TXSTART_INIT&0xFF) == 0);
+    enc28j60WriteZero(B0_ETXSTL);
     enc28j60Write(B0_ETXSTH, TXSTART_INIT>>8);
     
     // do bank 1 stuff
@@ -183,7 +194,7 @@ void enc28j60Init(uint8_t* myMac)
     // enable MAC receive
     enc28j60Write(B2_MACON1, MACON1_MARXEN|MACON1_TXPAUS|MACON1_RXPAUS);
     // bring MAC out of reset
-    enc28j60Write(B2_MACON2, 0x00);
+    enc28j60WriteZero(B2_MACON2);
     // enable automatic padding and CRC operations
     //enc28j60WriteOp(ENC28J60_BIT_FIELD_SET, MACON3, MACON3_PADCFG0|MACON3_TXCRCEN|MACON3_FRMLNEN);
     enc28j60Write(B2_MACON3, MACON3_PADCFG0|MACON3_TXCRCEN|MACON3_FRMLNEN);
@@ -207,7 +218,7 @@ void enc28j60Init(uint8_t* myMac)
         asm (
             "ldi %0, 1 \n"
             "eor %0, %1 \n"
-            : "=d"(addr)
+            : "=&d"(addr)
             : "r"(c)
         );
         enc28j60WriteOp(addr, *--myMac);
@@ -236,9 +247,6 @@ uint8_t enc28j60PacketReceived()
 
 uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr)//uint16_t maxlen, uint8_t* packet)
 {
-    uint8_t rxstat;
-    uint16_t len;
-
     enc28j60SetBank(0);
     // Make absolutely certain that any previous packet was discarded
     //if( WasDiscarded == FALSE)
@@ -258,35 +266,17 @@ uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr)//uint16_t maxlen, uint8_t* 
     // read the next packet pointer
     uint8_t lo = spiTransferZero();
     uint8_t hi = spiTransferZero();
-    *NextPacketPtr = WORD(lo, hi);
+    *NextPacketPtr = UINT16(lo, hi);
     //NextPacketPtr  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
     //NextPacketPtr |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
     // read the packet length
     lo = spiTransferZero();
     hi = spiTransferZero();
-    len = WORD(lo, hi);
+    return UINT16(lo, hi);
     //len  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
     //len |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
     // remove the CRC count
     //len -= 4;
-    // read the receive status
-    rxstat = spiTransferZero();
-    spiTransferZero();
-    //rxstat  = enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0);
-    //rxstat |= enc28j60ReadOp(ENC28J60_READ_BUF_MEM, 0)<<8;
-
-    // limit retrieve length
-    //if (len > maxlen)
-    //{
-    //len = maxlen;
-    //}
-
-    if (!(rxstat & 0x80))
-    {
-        return 0;
-    }
-
-    return len;
 }
 
 void enc28j60EndRead(uint16_t* NextPacketPtr)
@@ -331,7 +321,8 @@ void enc28j60WritePacket(uint16_t txnd)//len)
     enc28j60SetBank(0);
 
     // Set the write pointer to start of transmit buffer area
-    enc28j60Write(B0_EWRPTL, TXSTART_INIT&0xFF);
+    STATIC_ASSERT((TXSTART_INIT&0xFF) == 0);
+    enc28j60WriteZero(B0_EWRPTL);
     enc28j60Write(B0_EWRPTH, TXSTART_INIT>>8);
     // Set the TXND pointer to correspond to the packet size given
     //enc28j60Write(ETXNDL, (TXSTART_INIT+len)&0xFF);
@@ -347,7 +338,7 @@ void enc28j60WritePacket(uint16_t txnd)//len)
 
     // write per-packet control byte
     //enc28j60WriteOp(ENC28J60_WRITE_BUF_MEM, 0, 0x00);
-    spiTransferZero(); // ToDo
+    spiTransferZero();
     //enc28j60WriteByte(0);
 }
 

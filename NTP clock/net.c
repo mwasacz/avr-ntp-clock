@@ -11,12 +11,6 @@
 
 // ToDo: try using local array instead of global
 
-net_t net __attribute__((section(".noinit")));
-
-#define offsetof(type, member) __builtin_offsetof(type, member)
-#define memberSize(type, member) sizeof(((type *)0)->member)
-#define netOffset(member) (offsetof(net_t, member) + memberSize(net_t, member))
-
 #ifdef __AVR_ATtiny4313__
 #define enc28j60ReadByte() spiTransferZero()
 #define enc28j60WriteByte(data) spiTransfer(data)
@@ -80,7 +74,7 @@ static void writeFFs(uint8_t len)
     } while (--len);
 }
 
-static uint8_t __attribute__((noinline)) getAddrLength(uint8_t p)
+static uint8_t __attribute__((noinline)) addrLength(uint8_t p)
 {
     //if (p <= netOffset(syncTime))
     //    return 2;
@@ -94,7 +88,7 @@ static void writeAddr(uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&net + p;
     Y_REG(ptr);
-    uint8_t len = getAddrLength(p);
+    uint8_t len = addrLength(p);
     do
     {
         enc28j60WriteByte(*--ptr);
@@ -121,7 +115,8 @@ static uint16_t addrChecksum(uint16_t sum, uint8_t p)
         "brne loop_%= \n"
         "adc %B0, __zero_reg__ \n"
         "adc %A0, __zero_reg__ \n"
-        : "+r" (sum), "+e" (ptr), "+d" (p), "=d" (c) : "M" (netOffset(config.myMac) + 1)
+        : "+r" (sum), "+e" (ptr), "+d" (p), "=&d" (c)
+        : "M" (netOffset(config.myMac) + 1)
     );
 
     return sum;
@@ -141,7 +136,7 @@ static void readAddr(uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&net + p;
     Y_REG(ptr);
-    uint8_t len = getAddrLength(p);
+    uint8_t len = addrLength(p);
     do
     {
         *--ptr = enc28j60ReadByte();
@@ -152,7 +147,7 @@ static uint8_t checkAddr(uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&net + p;
     Y_REG(ptr);
-    uint8_t len = getAddrLength(p);
+    uint8_t len = addrLength(p);
     do
     {
         if (*--ptr != enc28j60ReadByte()) return len;
@@ -172,9 +167,9 @@ static void copyAddr(uint8_t d, uint8_t s)
     } while (--len);
 }
 
-static uint16_t timeFrac(uint16_t tcnt)
+static uint16_t __attribute__((noinline)) timeFrac(uint16_t tcnt)
 {
-    return DWORD(0, 0, L(tcnt), H(tcnt)) / TIMER_1S;
+    return UINT32(0, 0, L(tcnt), H(tcnt)) / TIMER_1S;
 }
 
 static void sendDhcpPacket(uint8_t state)
@@ -183,21 +178,22 @@ static void sendDhcpPacket(uint8_t state)
     uint16_t sum;
     if (state == 1)
     {
-        uint16_t* ptr = (uint16_t *)&net.xid;
+        uint32_t* ptr = (uint32_t*)&net.xid;
         E_REG(ptr);
-        *ptr = *ptr + 1; // ToDo
+        *ptr = *ptr + 1;
 
         sum = (uint24_t)IP_PROTO_UDP_V + DHCP_DISCOVER_RENEW_LEN + UDP_HEADER_LEN + 67 + 68 + DHCP_DISCOVER_RENEW_LEN + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0137 + 0x0401 + 0x032A + 0x64FF - 0xFFFF;
     }
     else if (state == 2)
     {
         sum = (uint24_t)IP_PROTO_UDP_V + DHCP_REQUEST_LEN + UDP_HEADER_LEN + 67 + 68 + DHCP_REQUEST_LEN + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0332 + 0x0400 + 0x0036 + 0x0400 + 0x0037 + 0x0401 + 0x032A + 0x64FF - 0xFFFF;
-        sum = sum << 8 | sum >> 8;
+        sum = UINT16(H(sum), L(sum));
         
         sum = addrChecksum(sum, netOffset(myIp));
         sum = addrChecksum(sum, netOffset(serverId));
 
-        sum = sum << 8 | sum >> 8;
+        R_REG(sum);
+        sum = UINT16(H(sum), L(sum));
     }
     else // state == 3
     {
@@ -439,7 +435,8 @@ static void sendEthPacket(uint16_t len, uint8_t state)
     }
     else
     {
-        enc28j60WriteZero(); // ETHTYPE_IP_L_V
+        STATIC_ASSERT(ETHTYPE_IP_L_V == 0);
+        enc28j60WriteZero();
         sendIpPacket(len, state);
     }
 }
@@ -477,7 +474,7 @@ static void sendPacket(uint8_t state)
 
 static void receiveDhcpPacket(uint16_t len, netstate_t* netstate)
 {
-    if (len < DHCP_OFFER_ACK_LEN + UDP_HEADER_LEN) return;
+    if (len < DHCP_OFFER_ACK_LEN + UDP_HEADER_LEN) return1;
 
     if (enc28j60ReadByte() != 2) return1; // OP
     if (enc28j60ReadByte() != 1) return1; // HTYPE
@@ -525,65 +522,69 @@ static void receiveDhcpPacket(uint16_t len, netstate_t* netstate)
             uint8_t l = enc28j60ReadByte();
             readLen += l;
             if (readLen > len) return2;
-            if (code == 53 && l == 1)
+            if (l == 4)
+            {
+                if (code == 1)
+                {
+                    if (found & 0x01) return;
+                    readAddr(netOffset(netmask));
+                    found |= 0x01;
+                    continue;
+                }
+                if (code == 51)
+                {
+                    if (found & 0x08) return;
+                    uint8_t b3 = enc28j60ReadByte();
+                    uint8_t b2 = enc28j60ReadByte();
+                    uint8_t b1 = enc28j60ReadByte();
+                    uint8_t b0 = enc28j60ReadByte();
+                    asm (
+                        "lsr %2 \n"
+                        "ror %1 \n"
+                        "ror %0 \n"
+                        "or %2, %3 \n"
+                        "breq store_%= \n"
+                        "ldi %0, 0xFF \n"
+                        "ldi %1, 0xFF \n"
+                        "store_%=:"
+                        "cli \n"
+                        "sts %4+1, %1 \n"
+                        "sts %4, %0 \n"
+                        "sei \n"
+                        :
+                        : "d"(b0), "d"(b1), "r"(b2), "r"(b3), "m"(net.leaseTime)
+                    );
+                    found |= 0x08;
+                    continue;
+                }
+                if (code == 54)
+                {
+                    if (found & 0x10) return;
+                    if (netstate->state == 1)
+                        readAddr(netOffset(serverId));
+                    else
+                        invalidAddr |= checkAddr(netOffset(serverId));
+                    found |= 0x10;
+                    continue;
+                }
+            }
+            if (l >= 4 && code == 3)
+            {
+                if (found & 0x02) return;
+                readAddr(netOffset(gwIp));
+                found |= 0x02;
+                l -= 4;
+            }
+            if (l == 1 && code == 53)
             {
                 if (found & 0x04) return;
                 type = enc28j60ReadByte();
                 found |= 0x04;
+                continue;
             }
-            else if (code == 54 && l == 4)
-            {
-                if (found & 0x10) return;
-                if (netstate->state == 1)
-                    readAddr(netOffset(serverId));
-                else
-                    invalidAddr |= checkAddr(netOffset(serverId));
-                found |= 0x10;
-            }
-            else if (code == 51 && l == 4)
-            {
-                if (found & 0x08) return;
-                uint8_t b3 = enc28j60ReadByte();
-                uint8_t b2 = enc28j60ReadByte();
-                uint8_t b1 = enc28j60ReadByte();
-                uint8_t b0 = enc28j60ReadByte();
-                asm volatile (
-                    "lsr %2 \n"
-                    "ror %1 \n"
-                    "ror %0 \n"
-                    "or %2, %3 \n"
-                    "breq store_%= \n"
-                    "ldi %0, 0xFF \n"
-                    "ldi %1, 0xFF \n"
-                    "store_%=:"
-                    "cli \n"
-                    "sts %4+1, %1 \n"
-                    "sts %4, %0 \n"
-                    "sei \n"
-                    :
-                    : "d"(b0), "d"(b1), "r"(b2), "r"(b3), "m"(net.leaseTime)
-                );
-                found |= 0x08;
-            }
-            else if (code == 1 && l == 4)
-            {
-                if (found & 0x01) return;
-                readAddr(netOffset(netmask));
-                found |= 0x01;
-            }
-            else
-            {
-                if (code == 3 && l >= 4)
-                {
-                    if (found & 0x02) return;
-                    readAddr(netOffset(gwIp));
-                    found |= 0x02;
-                    l -= 4;
-                }
-                if (l)
-                    readBytes(l);
-                asm ("");
-            }
+            if (l)
+                readBytes(l);
+            asm ("");
         }
     }
     
@@ -596,14 +597,15 @@ static void receiveDhcpPacket(uint16_t len, netstate_t* netstate)
         }
 
         if (invalidAddr) return;
-        if (found < 0x1C) return;
 
         uint8_t arpPtr = netOffset(config.dstIp);
-
+        uint8_t c = 4;
+        R_REG(arpPtr);
+        R_REG(c);
+        
+        if (found < 0x1C) return3;
         if (found & 0x01) // found netmask
         {
-            uint8_t c = 4;
-            R_REG(c);
             uint8_t* pd = net.config.dstIp + 4;
             uint8_t* pm = net.myIp + 4;
             uint8_t* pn = net.netmask + 4;
@@ -658,20 +660,21 @@ static void receiveNtpPacket(netstate_t* netstate)
     if (enc28j60ReadByte() != 0) return;
     if (enc28j60ReadByte() != 0) return;
 
-    net_t *ptr = &net;
-    E_REG(ptr);
+    uint8_t *timestampPtr = net.timestamp;
+    E_REG(timestampPtr);
+    uint32_t *timePtr = (uint32_t*)(timestampPtr - offsetof(net_t, timestamp) + offsetof(net_t, time));
     
     cli(); // ToDo: read timestamp immediately after receiving packet
     uint16_t tcnt = TCNT1;
     uint8_t tifr = TIFR;
-    uint32_t timInt = ptr->time;
+    uint32_t timInt = *timePtr;
     sei();
 
     if (tifr & (1<<OCF1A))
         tcnt = TIMER_1S - 1;
     uint16_t timFrac = timeFrac(tcnt);
 
-    uint8_t temp[6] = { ptr->timestamp[0], ptr->timestamp[1], ptr->timestamp[2], ptr->timestamp[3], ptr->timestamp[4], ptr->timestamp[5] };
+    uint8_t temp[6] = { timestampPtr[0], timestampPtr[1], timestampPtr[2], timestampPtr[3], timestampPtr[4], timestampPtr[5] };
 
     // (timInt, timFrac) -= (temp[5], temp[4], temp[3], temp[2], temp[1], temp[0]);
     asm (
@@ -732,27 +735,9 @@ static void receiveNtpPacket(netstate_t* netstate)
         : "r" (temp[0]), "r" (temp[1]), "r" (temp[2]), "r" (temp[3]), "r" (temp[4]), "r" (temp[5])
     );
     
-    u32 resTcnt = {0};
-    resTcnt.d = (uint32_t)timFrac * TIMER_1S;
+    u32_t resTcnt = { .u32 = mulAdd16(0, timFrac, TIMER_1S) };
 
-    ptr = &net;
-    uint8_t gtccr = (1<<PSR10);
-    tifr = (1<<OCF1A) | (1<<OCF1B);
-    uint16_t timeout = SYNC_TIMEOUT;
-    E_REG(ptr);
-    R_REG(gtccr);
-    R_REG(tifr);
-    R_REG(timeout);
-
-    cli();
-    GTCCR = gtccr;
-    TCNT1 = resTcnt.w[1];
-    TIFR = tifr;
-    ptr->time = timInt;
-    ptr->syncTime = timeout;
-    flag |= (1<<TIME_OK);
-    flag |= (1<<SYNC_OK);
-    sei();
+    resetTimer(timInt, resTcnt.u16[1]);
 
     netstate->state = 6;
 #ifndef __AVR_ATtiny4313__
@@ -775,17 +760,26 @@ static void receiveUdpPacket(uint16_t len, netstate_t* netstate)
     // Length
     uint8_t hi = enc28j60ReadByte();
     uint8_t lo = enc28j60ReadByte();
-    uint16_t udpLen = WORD(lo, hi);
-    if (udpLen > len || udpLen < NTP_LEN + UDP_HEADER_LEN) return5;
+    uint16_t udpLen = UINT16(lo, hi);
+    if (udpLen > len || udpLen < NTP_LEN + UDP_HEADER_LEN) return1;
 
     // Checksum
     enc28j60ReadByte();
     enc28j60ReadByte();
 
-    if (netstate->state <= 3 && srcPort == 67 && dstPort == 68)
+    if (netstate->state <= 3)
+    {
+        if (srcPort != 67) return;
+        if (dstPort != 68) return1;
         receiveDhcpPacket(udpLen, netstate);
-    else if (netstate->state == 5 && srcPort == 123 && dstPort == 123)
+    }        
+    else
+    {
+        if (netstate->state != 5) return3;
+        if (srcPort != 123) return;
+        if (dstPort != 123) return3;
         receiveNtpPacket(netstate);
+    }        
 }
 
 static void receiveIpPacket(uint16_t len, netstate_t* netstate)
@@ -796,7 +790,7 @@ static void receiveIpPacket(uint16_t len, netstate_t* netstate)
     // Length
     uint8_t hi = enc28j60ReadByte();
     uint8_t lo = enc28j60ReadByte();
-    uint16_t ipLen = WORD(lo, hi);
+    uint16_t ipLen = UINT16(lo, hi);
     if (ipLen > len || ipLen < NTP_LEN + UDP_HEADER_LEN + IP_HEADER_LEN) return4;
 
     // Id, Flags, Fragment offset, TTL, Protocol // ToDo: check Flags, Fragment offset ???
@@ -864,12 +858,22 @@ static void receiveEthPacket(uint16_t len, netstate_t* netstate)
 {
     if (len < ARP_LEN + ETH_HEADER_LEN + CRC_LEN) return4;
 
-    // Destination MAC (checked by ENC28J60), Source MAC (checked by ENC28J60), EtherType
-    if (readBytes(13) != ETHTYPE_H_V) return4;
+    // Receive status, Destination MAC (checked by ENC28J60), Source MAC (checked by ENC28J60), EtherType
+    if (!(spiTransferZero() & 0x80)) return;
+#ifdef __AVR_ATtiny4313__
+    uint8_t typeH = readBytes(14);
+#else
+    spiTransferZero();
+    uint8_t typeH = readBytes(13);
+#endif
+    if (typeH != ETHTYPE_H_V) return4;
     uint8_t typeL = enc28j60ReadByte();
-    if (netstate->retryCount && typeL == ETHTYPE_IP_L_V)
+    if (typeL == ETHTYPE_IP_L_V)
+    {
+        if (netstate->retryCount == 0) return4;
         receiveIpPacket(len - ETH_HEADER_LEN - CRC_LEN, netstate);
-    else if (netstate->state > 2 && typeL == ETHTYPE_ARP_L_V)
+    }        
+    else if (typeL == ETHTYPE_ARP_L_V && netstate->state > 2)
         receiveArpPacket(netstate);
 }
 
@@ -884,29 +888,29 @@ static void receivePacket(netstate_t* netstate)
 #endif
 }
 
-uint8_t netTick(uint32_t* time)
+void netTick()
 {
-    net_t *ptr = &net;
-    E_REG(ptr);
+    uint32_t *timePtr = &net.time;
+    E_REG(timePtr);
+    uint16_t *leaseTimePtr = (uint16_t*)((uint8_t*)timePtr - offsetof(net_t, time) + offsetof(net_t, leaseTime));
+    uint16_t *syncTimePtr = (uint16_t*)((uint8_t*)timePtr - offsetof(net_t, time) + offsetof(net_t, syncTime));
     
-    if (ptr->leaseTime)
-        ptr->leaseTime--;
+    if (*leaseTimePtr)
+        (*leaseTimePtr)--;
 
-    if (ptr->syncTime)
-        ptr->syncTime--;
+    if (*syncTimePtr)
+        (*syncTimePtr)--;
     
     uint16_t temp = retryTime;
     if (temp)
         retryTime = temp - 1;
     
+    uint32_t time = *timePtr + 1;
+    *timePtr = time;
+    R_REG(time);
+    
     if (flag & (1<<TIME_OK))
-    {
-        *time = ptr->time + 1;
-        ptr->time = *time;
-        R_REG(*time);
-        return 1;
-    }
-    return 0;
+        displayTime(time);
 }
 
 void netLoop(netstate_t* netstate)
@@ -932,17 +936,17 @@ void netLoop(netstate_t* netstate)
     else if (enc28j60PacketReceived()) // ToDo: deal with buffer overflow !!!
         receivePacket(netstate);
     
-    net_t* netPtr = &net;
-    E_REG(netPtr);
+    uint16_t* leaseTimePtr = &net.leaseTime;
+    E_REG(leaseTimePtr);
     uint16_t sync;
     uint16_t lease;
-    asm volatile (
+    asm (
         "ldd %B0, %a2+%3+1 \n"
         "ldd %A0, %a2+%3 \n"
-        "ldd %B1, %a2+%4+1 \n"
-        "ldd %A1, %a2+%4 \n"
-        : "=r"(sync), "=r"(lease)
-        : "b"(netPtr), "I"(offsetof(net_t, syncTime)), "I"(offsetof(net_t, leaseTime))
+        "ldd %B1, %a2+1 \n"
+        "ld %A1, %a2 \n"
+        : "=&r"(sync), "=&r"(lease)
+        : "b"(leaseTimePtr), "I"(offsetof(net_t, syncTime) - offsetof(net_t, leaseTime))
     );
     if (lease == 0 && netstate->state > 3 && !(flag & (1<<CUSTOM_IP)))
     {
@@ -987,13 +991,13 @@ void netLoop(netstate_t* netstate)
         uint8_t retryH = retryTimeH;
         uint8_t retryL = retryTimeL;
         if ((retryL | retryH) || netstate->state > 5)
-            return;
+            return5;
         if (netstate->retryCount)
         {
             (netstate->retryCount)--;
             if (netstate->retryCount == 0)
             {
-                uint16_t temp = RETRY_TIMEOUT_LONG;
+                uint16_t temp = RETRY_TIMEOUT_L;
                 R_REG(temp);
                 cli();
                 retryTime = temp;
@@ -1003,7 +1007,7 @@ void netLoop(netstate_t* netstate)
                 tx('\r');
                 tx('\n');
 #endif
-                return;
+                return5;
             }
 #ifndef __AVR_ATtiny4313__
             tx('R');
@@ -1019,7 +1023,7 @@ void netLoop(netstate_t* netstate)
             tx('F');
 #endif
         }
-        retryTimeL = RETRY_TIMEOUT_SHORT;
+        retryTimeL = RETRY_TIMEOUT_S;
 #ifndef __AVR_ATtiny4313__
         tx(' ');
         txHex(netstate->state);
@@ -1036,9 +1040,8 @@ void netLoop(netstate_t* netstate)
 
 void netInit(netstate_t* netstate)
 {
-    flag = 0;
-    
     uint8_t arpPtr = netOffset(config.dstIp);
+    STATIC_ASSERT(offsetof(net_t, leaseTime) + sizeof(uint16_t) == offsetof(net_t, syncTime));
     uint8_t* pt = (uint8_t*)&net.leaseTime + 4;
     uint8_t* pd = net.config.dstIp + 4;
     uint8_t* pm = net.config.myIp + 4;

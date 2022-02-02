@@ -11,6 +11,8 @@
 
 #include <avr/io.h>
 #include "config.h"
+#include "common.h"
+#include "arithmetic.h"
 
 // ENC28J60 Control Registers
 
