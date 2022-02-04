@@ -3,16 +3,12 @@
  *
  * Created: 01.07.2018 12:22:14
  *  Author: Mikolaj
- */ 
-
+ */
 
 #ifndef ENC28J60_H
 #define ENC28J60_H
 
-#include <avr/io.h>
-#include "config.h"
-#include "common.h"
-#include "arithmetic.h"
+#include <stdint.h>
 
 // ENC28J60 Control Registers
 
@@ -238,32 +234,30 @@
 #define ENC28J60_BIT_FIELD_CLR  0xA0
 #define ENC28J60_SOFT_RESET     0xFF
 
-// ToDo: verify buffer boundaries (max transmit length) and max frame length
-// The RXSTART_INIT must be zero. See Rev. B4 Silicon Errata point 5.
 // Buffer boundaries applied to internal 8K ram
-// the entire available packet buffer space is allocated
-//
-// start with recbuf at 0 (must be zero! assumed in code)
-#define RXSTART_INIT     0x0
-// receive buffer end, must be odd number:
-#define RXSTOP_INIT      (0x1FFF-0x0600)
-// start TX buffer after RXSTOP_INIT with space for one full ethernet frame (~1500 bytes)
-#define TXSTART_INIT     (0x1FFF-0x0600+1)
-// stp TX buffer at end of mem
-#define TXSTOP_INIT      0x1FFF
-//
-// max frame length which the controller will accept:
-// (note: maximum ethernet frame length would be 1518)
-#define        MAX_FRAMELEN        1500
+// The entire available packet buffer space is allocated
 
-extern void enc28j60Init(uint8_t* myMac);
-extern uint8_t enc28j60LinkUp();
-extern uint8_t enc28j60PacketReceived();
-extern uint16_t enc28j60ReadPacket(uint16_t* NextPacketPtr);
-extern void enc28j60EndRead(uint16_t* NextPacketPtr);
-extern void enc28j60WritePacket(uint16_t txnd);
-extern void enc28j60EndWrite();
+// Start of receive buffer - must be zero (rev. B4 Silicon Errata point 5)
+#define RXSTART_INIT    0x0000
+// End of receive buffer - must be odd number
+#define RXSTOP_INIT     (0x1FFF - 0x0600)
+// Start of transmit buffer - after RXSTOP_INIT with space for one full Ethernet frame (1500 bytes)
+#define TXSTART_INIT    (0x1FFF - 0x0600 + 1)
+// End of TX buffer - at end of memory
+#define TXSTOP_INIT     0x1FFF
+
+// Max frame length which the controller will accept
+// Note: maximum Ethernet frame length would be 1518
+#define MAX_FRAMELEN    1500
+
 extern uint8_t spiTransfer(uint8_t data);
 extern uint8_t spiTransferZero();
+extern void enc28j60Init(uint8_t *myMac);
+extern uint8_t enc28j60PacketReceived();
+extern uint16_t enc28j60ReadPacket(uint16_t *nextPacketPtr);
+extern void enc28j60EndRead(uint16_t *nextPacketPtr);
+extern void enc28j60WritePacket(uint16_t txnd);
+extern void enc28j60EndWrite();
+extern uint8_t enc28j60LinkUp();
 
 #endif /* ENC28J60_H */

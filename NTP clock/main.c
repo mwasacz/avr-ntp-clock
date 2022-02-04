@@ -4,38 +4,29 @@
  *                                                                      *
  *  by Mikolaj Wasacz                                                   *
  *                                                                      *
- *  Microcontroller: AVR ATmega16                                       *
- *  Fuse bits: Low:0x3F High:0xC1                                       *
- *  Clock: 16 MHz Crystal Oscillator                                    *
- *----------------------------------------------------------------------*/
-
-/*----------------------------------------------------------------------*
- *  INCLUDES                                                            *
+ *  Microcontroller: AVR ATtiny4313                                     *
+ *  Fuse bits: Low:0xDF High:0x9B Ext:0xFF                              *
+ *  Clock: 12 MHz Crystal Oscillator                                    *
  *----------------------------------------------------------------------*/
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include "config.h"
 #include "common.h"
 #include "arithmetic.h"
 #include "net.h"
 
-/*----------------------------------------------------------------------*
- *                                                                      *
- *  FUNCTIONS                                                           *
- *                                                                      *
- *----------------------------------------------------------------------*/
+#define commonBranch    asm ("")
 
 static uint8_t debounce()
 {
-    uint8_t gifr = (1<<INTF0) | (1<<INTF1);
+    uint8_t gifr = (1 << INTF0) | (1 << INTF1);
     uint8_t deb = DEBOUNCE_CYCLES;
     R_REG(gifr);
     R_REG(deb);
     cli();
-    if (GIFR & ((1<<INTF0) | (1<<INTF1)))
+    if (GIFR & ((1 << INTF0) | (1 << INTF1)))
     {
         GIFR = gifr;
         debounceCnt = deb;
@@ -46,13 +37,13 @@ static uint8_t debounce()
 
 static void eepromWait()
 {
-    while (EECR & (1<<EEPE));
+    while (EECR & (1 << EEPE));
 }
 
 static uint8_t eepromRead(uint8_t p)
 {
     EEAR = p;
-    EECR |= (1<<EERE);
+    EECR |= (1 << EERE);
     return EEDR;
 }
 
@@ -65,16 +56,10 @@ static void eepromWrite(uint8_t p, uint8_t val)
     EEAR = p;
     EEDR = val;
     cli();
-    EECR |= (1<<EEMPE);
-    EECR |= (1<<EEPE);
+    EECR |= (1 << EEMPE);
+    EECR |= (1 << EEPE);
     sei();
 }
-
-/*----------------------------------------------------------------------*
- *                                                                      *
- *  MAIN                                                                *
- *                                                                      *
- *----------------------------------------------------------------------*/
 
 // Initial configuration data (all addresses are least significant byte first)
 volatile config_t config EEMEM = {
@@ -115,74 +100,72 @@ volatile config_t config EEMEM = {
     }
 };
 
-#define commonBranch asm ("")
-
 int main()
 {
 #ifdef __AVR_ATtiny4313__
 
-    DISP_CS_PORT = (1<<CS) | DISP_SEL | DISP_SEG;
-    DISP_CS_DDR = (1<<CS) | DISP_SEL | DISP_SEG;
+    DISP_CS_PORT = (1 << CS) | DISP_SEL | DISP_SEG;
+    DISP_CS_DDR = (1 << CS) | DISP_SEL | DISP_SEG;
 
-    MAIN_PORT = (1<<SW_1) | (1<<SW_2) | (1<<PWR_SENSE);
-    MAIN_DDR = (1<<LED) | (1<<SPI_SI) | (1<<SPI_SCK);
-    
-    ACSR |= (1<<ACD);
-    PRR = (1<<PRUSI) | (1<<PRUSART);
-    
-    MCUCR = (1<<ISC10) | (1<<ISC00);
+    MAIN_PORT = (1 << SW_1) | (1 << SW_2) | (1 << PWR_SENSE);
+    MAIN_DDR = (1 << LED) | (1 << SPI_SI) | (1 << SPI_SCK);
+
+    ACSR |= (1 << ACD);
+    PRR = (1 << PRUSI) | (1 << PRUSART);
+
+    MCUCR = (1 << ISC10) | (1 << ISC00);
 
     OCR0A = TIMER_DISP_N - 1;
 #if TIMER_DISP_D < 256
     OCR0B = TIMER_DISP_D - 1;
 #endif
-    TCCR0B = (1<<CS01) | (1<<CS00);
-    
+    TCCR0B = (1 << CS01) | (1 << CS00);
+
     OCR1A = TIMER_1S - 1;
     OCR1B = TIMER_1S / 2 - 1;
-    TCCR1B = (1<<CS12) | (1<<WGM12);
+    TCCR1B = (1 << CS12) | (1 << WGM12);
 
 #if TIMER_DISP_D < 256
-    TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<OCIE0B) | (1<<TOIE0);
+    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << OCIE0B) | (1 << TOIE0);
 #else
-    TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0A) | (1<<TOIE0);
+    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0);
 #endif
-    
+
 #else
 
-    MAIN_PORT = (1<<TX) | (1<<SW_1) | (1<<SW_2) | (1<<CS);
-    MAIN_DDR = (1<<LED) | (1<<TX) | (1<<SPI_SI) | (1<<SPI_SCK) | (1<<CS);
-    
-    DISP_SEL_PORT = (1<<SW_DISP_SEL) | DISP_SEL;
+    MAIN_PORT = (1 << TX) | (1 << SW_1) | (1 << SW_2) | (1 << CS);
+    MAIN_DDR = (1 << LED) | (1 << TX) | (1 << SPI_SI) | (1 << SPI_SCK) | (1 << CS);
+
+    DISP_SEL_PORT = (1 << SW_DISP_SEL) | DISP_SEL;
     DISP_SEL_DDR = DISP_SEL;
-    
+
     DISP_SEG_PORT = DISP_SEG;
     DISP_SEG_DDR = DISP_SEG;
-    
-    ACSR |= (1<<ACD);
-    
-    UCSRB = (1<<TXEN);
+
+    ACSR |= (1 << ACD);
+
+    UCSRB = (1 << TXEN);
     UBRRL = 20;
-    
-    MCUCR = (1<<ISC10) | (1<<ISC00);
+
+    MCUCR = (1 << ISC10) | (1 << ISC00);
 
     OCR0 = TIMER_DISP_N - 1;
-    TCCR0 = (1<<CS01) | (1<<CS00);
-    
+    TCCR0 = (1 << CS01) | (1 << CS00);
+
     OCR1A = TIMER_1S - 1;
     OCR1B = TIMER_1S / 2 - 1;
-    TCCR1B = (1<<CS12) | (1<<WGM12);
-    
-    TIMSK = (1<<OCIE1A) | (1<<OCIE1B) | (1<<OCIE0) | (1<<TOIE0);
-    
+    TCCR1B = (1 << CS12) | (1 << WGM12);
+
+    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0) | (1 << TOIE0);
+
 #endif
-    
+
     eepromWait();
     uint8_t c = sizeof(config_t) - 1;
     STATIC_ASSERT(sizeof(disp_t) <= sizeof(config_t));
-    STATIC_ASSERT(offsetof(net_t, disp) + sizeof(config_t) <= sizeof(net_t));
-    uint8_t* dispPtr = (uint8_t*)&net.disp + sizeof(config_t);
-    uint8_t* configPtr = (uint8_t*)&net.config + sizeof(config_t);
+    STATIC_ASSERT(offsetof(mem_t, disp) + sizeof(config_t) <= sizeof(mem_t));
+    uint8_t *dispPtr = (uint8_t *)&mem.disp + sizeof(config_t);
+    uint8_t *configPtr = (uint8_t *)&mem.config + sizeof(config_t);
     uint8_t blank = 15;
     R_REG(blank);
     do
@@ -191,12 +174,12 @@ int main()
         *--configPtr = eepromRead(c);
     } while (--c != 0xFF);
 
-    page |= (1<<SW_1);
+    page |= (1 << SW_1);
 
     while (1)
     {
-        net.disp.state = 0;
-        
+        mem.disp.state = 0;
+
         sei();
 
         netstate_t netstate;
@@ -207,17 +190,17 @@ int main()
             do
             {
                 netLoop(&netstate);
-                net.disp.state = netstate.state;
+                mem.disp.state = netstate.state;
             } while (debounce());
             uint8_t b = MAIN_PIN;
-            b &= (1<<SW_2) | (1<<SW_1);
+            b &= (1 << SW_2) | (1 << SW_1);
             if (b == 0)
                 break;
             page = b;
         }
 
-        datetime_t *initTimePtr = &net.initTime;
-        E_REG(initTimePtr);
+        datetime_t *initTimePtr = &mem.initTime;
+        B_REG(initTimePtr);
         initTimePtr->second = 0;
         initTimePtr->minute = 0;
         initTimePtr->hour = 0;
@@ -233,35 +216,35 @@ int main()
 
         while (1)
         {
-            if (btn & (1<<SW_1))
+            if (btn & (1 << SW_1))
             {
                 uint8_t newVal = mulAdd8(dig2, dig1, 10);
                 newVal = mulAdd8(dig3, newVal, 10);
-                
-                STATIC_ASSERT(offsetof(net_t, config) + sizeof(config_t) == offsetof(net_t, initTime));
-                uint8_t* ptr = (uint8_t*)&net.config + sizeof(config_t) + sizeof(datetime_t) - 2;
-                E_REG(ptr);
+
+                STATIC_ASSERT(offsetof(mem_t, config) + sizeof(config_t) == offsetof(mem_t, initTime));
+                uint8_t *ptr = (uint8_t *)&mem.config + sizeof(config_t) + sizeof(datetime_t) - 2;
+                B_REG(ptr);
                 ptr -= addr;
-                
+
                 if (pos == 0)
-                {   
+                {
                     if (addr >= sizeof(datetime_t) && newVal != *(ptr + 1))
                     {
                         *(ptr + 1) = newVal;
                         eepromWrite(addr - sizeof(datetime_t), newVal);
                     }
-                    
+
                     uint8_t val = *ptr;
                     dig3 = val % 10;
                     uint8_t v = val / 10;
                     R_REG(v);
                     dig2 = v % 10;
                     dig1 = v / 10;
-                    
+
                     addr++;
                     if (addr >= sizeof(config_t) + sizeof(datetime_t))
                         break;
-                    
+
                     commonBranch;
                 }
                 else
@@ -297,15 +280,15 @@ int main()
                         if (dig3 > x)
                             dig3 = 0;
                     }
-                    
+
                     if (addr >= sizeof(datetime_t))
                         commonBranch;
                     else
                     {
                         *(ptr + 1) = newVal;
-                        datetime_t* initTimePtr = &net.initTime;
+                        datetime_t *initTimePtr = &mem.initTime;
                         Y_REG(initTimePtr);
-                        
+
                         uint8_t year = initTimePtr->year;
                         uint8_t d = year;
                         d += 3;
@@ -326,8 +309,8 @@ int main()
                                 "sbrs %1, 0 \n"
                                 "sbrc %1, 1 \n"
                                 "ldi %0, 28 \n"
-                                : "=&d"(temp)
-                                : "r"(year)
+                                : "=&d" (temp)
+                                : "r" (year)
                             );
                             if (month != 2)
                             {
@@ -349,23 +332,25 @@ int main()
                             "adc %B0, %B0 \n"
                             "adc %C0, %C0 \n"
                             "adc %D0, %D0 \n"
-                            : "+r" (time), "+r"(s)
+                            : "+r" (time), "+r" (s)
                         );
                         resetTimer(time, 0);
                     }
                 }
             }
+
             uint8_t p = 15;
             R_REG(p);
-            if (btn & (1<<SW_2))
+            if (btn & (1 << SW_2))
             {
                 pos++;
                 pos &= 3;
                 if (pos != 0)
                     p = pos;
             }
-            disp_t *dispPtr = &net.disp;
-            E_REG(dispPtr);
+
+            disp_t *dispPtr = &mem.disp;
+            B_REG(dispPtr);
             dispPtr->menu[0] = addr % 10;
             dispPtr->menu[1] = addr / 10;
             dispPtr->menu[2] = dig3;
@@ -373,16 +358,16 @@ int main()
             dispPtr->menu[4] = dig1;
             dispPtr->menu[5] = p;
             page = 0;
-            
+
             while (debounce());
-            
+
             uint8_t new = MAIN_PIN;
             btn = old & ~new;
             old = new;
         }
 
-        flag &= ~(1<<SYNC_OK);
-        flag &= ~(1<<CUSTOM_IP);
-        page = old & ((1<<SW_2) | (1<<SW_1));
+        flag &= ~(1 << SYNC_OK);
+        flag &= ~(1 << CUSTOM_IP);
+        page = old & ((1 << SW_2) | (1 << SW_1));
     }
 }

@@ -1,10 +1,9 @@
 /*
  * arithmetic.h
  *
- * Created: 02/02/2022 14:34:07
+ * Created: 02.02.2022 14:34:07
  *  Author: Mikolaj
- */ 
-
+ */
 
 #ifndef ARITHMETIC_H
 #define ARITHMETIC_H

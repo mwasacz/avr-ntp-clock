@@ -1,7 +1,7 @@
 #include <avr/io.h>
 #include "config.h"
 
-.extern net
+.extern mem
 .extern netTick
 
 #ifndef __AVR_ATtiny4313__
@@ -44,8 +44,8 @@ TIMER0_OVF_vect:
     subi ZL, -2
 #endif
     ldi ZH, 0
-    subi ZL, lo8(-(net))
-    sbci ZH, hi8(-(net))
+    subi ZL, lo8(-(mem))
+    sbci ZH, hi8(-(mem))
     ld ZL, Z
 #ifdef __AVR_ATtiny4313__
     swap ZL

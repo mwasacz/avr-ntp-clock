@@ -3,8 +3,7 @@
  *
  * Created: 01.07.2018 11:40:51
  *  Author: Mikolaj
- */ 
-
+ */
 
 #ifndef CONFIG_H
 #define CONFIG_H
@@ -38,7 +37,7 @@
 #define TIMER_DISP_D    256
 #define TIMER_DISP_N    128
 #define TIMER_1S        46875
-#define DEBOUNCE_CYCLES 7
+#define DEBOUNCE_CYCLES 10
 
 #define PWR_SENSE       1
 
@@ -53,7 +52,7 @@
 #define F_CPU           16000000
 #define TIMER_DISP_N    128
 #define TIMER_1S        62500
-#define DEBOUNCE_CYCLES 10
+#define DEBOUNCE_CYCLES 13
 
 #define TX              1
 #define CS              7
