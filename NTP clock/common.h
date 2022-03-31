@@ -68,13 +68,16 @@ typedef struct
 typedef struct
 {
     uint8_t menu[6];
+    uint16_t unused1;
     uint8_t state;
     uint8_t blank1;
     uint8_t year[4];
+    uint16_t unused2;
     uint8_t dow;
     uint8_t blank2;
     uint8_t month[2];
     uint8_t day[2];
+    uint16_t unused3;
     uint8_t second[2];
     uint8_t minute[2];
     uint8_t hour[2];
@@ -109,6 +112,8 @@ typedef struct
 
 extern mem_t mem;
 
+STATIC_ASSERT(offsetof(mem_t, disp) == 26);
+
 #ifdef __AVR_ATtiny4313__
 #define retryTime   _SFR_IO16(_SFR_IO_ADDR(GPIOR1))
 #define retryTimeH  GPIOR2
@@ -118,6 +123,8 @@ extern mem_t mem;
 #define retryTimeH  mem.retryTimeMem.u8[1]
 #define retryTimeL  mem.retryTimeMem.u8[0]
 #endif
+
+#define SEC_OFFSET  3155673600
 
 #define RETRY_COUNT     5
 #define RETRY_TIMEOUT_S 15

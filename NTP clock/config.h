@@ -75,8 +75,8 @@
 #define dispCnt         PCMSK1
 #define debounceCnt     PCMSK
 #else
-#define flag            TWAR
-#define page            TWBR
+#define flag            TWBR
+#define page            TWAR
 #define dispCnt         TCNT2
 #define debounceCnt     OCR2
 #endif

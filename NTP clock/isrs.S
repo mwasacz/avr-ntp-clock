@@ -8,6 +8,9 @@
 font:
 ;        0     1     2     3     4     5     6     7     8     9
 .byte 0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+sel:
+;        0     1     2     3
+.byte 0x1E, 0x1D, 0x1B, 0x17
 #endif
 
 .global TIMER1_COMPB_vect
@@ -22,21 +25,25 @@ TIMER0_OVF_vect:
     push ZL
     push ZH
     in ZL, _SFR_IO_ADDR(page)
+    add ZL, ZL
+    breq 1f
     sbis _SFR_IO_ADDR(flag), DISP_OK
-    andi ZL, ~(1 << SW_2)
-    mov ZH, ZL
-    lsr ZH
-    add ZL, ZH
+    ldi ZL, 8
+    cpi ZL, 24
     sbic _SFR_IO_ADDR(flag), SYNC_OK
     sbis _SFR_IO_ADDR(flag), BLINK_LED
-    brhs 1f
-    sbi _SFR_IO_ADDR(MAIN_PORT), LED
-    rjmp 2f
-1:  cbi _SFR_IO_ADDR(MAIN_PORT), LED
-2:  in ZH, _SFR_IO_ADDR(dispCnt)
+    brcc 2f
+1:  sbi _SFR_IO_ADDR(MAIN_PORT), LED
+    rjmp 3f
+2:  cbi _SFR_IO_ADDR(MAIN_PORT), LED
+3:  in ZH, _SFR_IO_ADDR(dispCnt)
     subi ZH, 1
     brcc 1f
+#ifdef __AVR_ATtiny4313__
     ldi ZH, 5
+#else
+    ldi ZH, 3
+#endif
 1:  out _SFR_IO_ADDR(dispCnt), ZH
     add ZL, ZH
 #ifndef __AVR_ATtiny4313__
@@ -44,13 +51,13 @@ TIMER0_OVF_vect:
     subi ZL, -2
 #endif
     ldi ZH, 0
-    subi ZL, lo8(-(mem))
-    sbci ZH, hi8(-(mem))
+    subi ZL, lo8(-(mem + 26))
+    sbci ZH, hi8(-(mem + 26))
     ld ZL, Z
 #ifdef __AVR_ATtiny4313__
     swap ZL
     in ZH, _SFR_IO_ADDR(dispCnt)
-    or ZL, ZH
+    adc ZL, ZH
     sbic _SFR_IO_ADDR(DISP_CS_PORT), CS
     ori ZL, 1 << CS
     out _SFR_IO_ADDR(DISP_CS_PORT), ZL
@@ -63,20 +70,17 @@ TIMER0_OVF_vect:
     out _SFR_IO_ADDR(DISP_SEL_PORT), ZH
     out _SFR_IO_ADDR(DISP_SEG_PORT), ZL
     in ZL, _SFR_IO_ADDR(dispCnt)
-    cpi ZL, 3
-    brcs 1f
-    add ZL, ZL
-    andi ZL, (1 << 3) | (1 << 2)
-1:  com ZL
-    andi ZL, DISP_SEL | (1 << SW_DISP_SEL)
+    ldi ZH, 0
+    subi ZL, lo8(-(sel))
+    sbci ZH, hi8(-(sel))
+    lpm ZL, Z
     out _SFR_IO_ADDR(DISP_SEL_PORT), ZL
 #endif
     in ZL, _SFR_IO_ADDR(debounceCnt)
     subi ZL, 1
-    brcs end
+    brcs 1f
     out _SFR_IO_ADDR(debounceCnt), ZL
-end:
-    pop ZH
+1:  pop ZH
     pop ZL
     out _SFR_IO_ADDR(SREG), r0
     pop r0
@@ -89,10 +93,11 @@ TIMER0_COMPA_vect:
 .global TIMER0_COMP_vect
 TIMER0_COMP_vect:
 #endif
-    sbis _SFR_IO_ADDR(flag), DISP_NIGHT
+    sbis _SFR_IO_ADDR(flag), DISP_OK
     reti
     sbis _SFR_IO_ADDR(page), SW_2
     sbic _SFR_IO_ADDR(page), SW_1
+    sbis _SFR_IO_ADDR(flag), DISP_NIGHT
     reti
 #ifdef __AVR_ATtiny4313__
 #if TIMER_DISP_D < 256

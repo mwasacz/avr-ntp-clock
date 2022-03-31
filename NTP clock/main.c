@@ -107,7 +107,7 @@ int main()
     DISP_CS_PORT = (1 << CS) | DISP_SEL | DISP_SEG;
     DISP_CS_DDR = (1 << CS) | DISP_SEL | DISP_SEG;
 
-    MAIN_PORT = (1 << SW_1) | (1 << SW_2) | (1 << PWR_SENSE);
+    MAIN_PORT = (1 << LED) | (1 << SW_1) | (1 << SW_2) | (1 << PWR_SENSE);
     MAIN_DDR = (1 << LED) | (1 << SPI_SI) | (1 << SPI_SCK);
 
     ACSR |= (1 << ACD);
@@ -121,19 +121,9 @@ int main()
 #endif
     TCCR0B = (1 << CS01) | (1 << CS00);
 
-    OCR1A = TIMER_1S - 1;
-    OCR1B = TIMER_1S / 2 - 1;
-    TCCR1B = (1 << CS12) | (1 << WGM12);
-
-#if TIMER_DISP_D < 256
-    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << OCIE0B) | (1 << TOIE0);
-#else
-    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0);
-#endif
-
 #else
 
-    MAIN_PORT = (1 << TX) | (1 << SW_1) | (1 << SW_2) | (1 << CS);
+    MAIN_PORT = (1 << LED) | (1 << TX) | (1 << SW_1) | (1 << SW_2) | (1 << CS);
     MAIN_DDR = (1 << LED) | (1 << TX) | (1 << SPI_SI) | (1 << SPI_SCK) | (1 << CS);
 
     DISP_SEL_PORT = (1 << SW_DISP_SEL) | DISP_SEL;
@@ -145,19 +135,27 @@ int main()
     ACSR |= (1 << ACD);
 
     UCSRB = (1 << TXEN);
-    UBRRL = 20;
+    UBRRL = 19;
 
     MCUCR = (1 << ISC10) | (1 << ISC00);
 
     OCR0 = TIMER_DISP_N - 1;
     TCCR0 = (1 << CS01) | (1 << CS00);
 
+#endif
+
     OCR1A = TIMER_1S - 1;
     OCR1B = TIMER_1S / 2 - 1;
-    TCCR1B = (1 << CS12) | (1 << WGM12);
+    uint8_t tccr1b = (1 << CS12) | (1 << WGM12);
+    R_REG(tccr1b);
+    TCCR1B = tccr1b;
 
+#ifndef __AVR_ATtiny4313__
     TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0) | (1 << TOIE0);
-
+#elif TIMER_DISP_D < 256
+    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << OCIE0B) | (1 << TOIE0);
+#else
+    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0);
 #endif
 
     eepromWait();
@@ -174,7 +172,8 @@ int main()
         *--configPtr = eepromRead(c);
     } while (--c != 0xFF);
 
-    page |= (1 << SW_1);
+    STATIC_ASSERT(((1 << SW_1) | (1 << SW_2)) == ((1 << CS12) | (1 << WGM12)));
+    page = tccr1b;
 
     while (1)
     {
@@ -218,36 +217,7 @@ int main()
         {
             if (btn & (1 << SW_1))
             {
-                uint8_t newVal = mulAdd8(dig2, dig1, 10);
-                newVal = mulAdd8(dig3, newVal, 10);
-
-                STATIC_ASSERT(offsetof(mem_t, config) + sizeof(config_t) == offsetof(mem_t, initTime));
-                uint8_t *ptr = (uint8_t *)&mem.config + sizeof(config_t) + sizeof(datetime_t) - 2;
-                B_REG(ptr);
-                ptr -= addr;
-
-                if (pos == 0)
-                {
-                    if (addr >= sizeof(datetime_t) && newVal != *(ptr + 1))
-                    {
-                        *(ptr + 1) = newVal;
-                        eepromWrite(addr - sizeof(datetime_t), newVal);
-                    }
-
-                    uint8_t val = *ptr;
-                    dig3 = val % 10;
-                    uint8_t v = val / 10;
-                    R_REG(v);
-                    dig2 = v % 10;
-                    dig1 = v / 10;
-
-                    addr++;
-                    if (addr >= sizeof(config_t) + sizeof(datetime_t))
-                        break;
-
-                    commonBranch;
-                }
-                else
+                do
                 {
                     if (pos == 1)
                     {
@@ -264,8 +234,10 @@ int main()
                     {
                         if (pos == 2)
                             dig2++;
-                        else
+                        else if (pos == 3)
                             dig3++;
+                        else
+                            break;
 
                         uint8_t x = 9;
                         R_REG(x);
@@ -280,62 +252,96 @@ int main()
                         if (dig3 > x)
                             dig3 = 0;
                     }
+                } while (0);
 
-                    if (addr >= sizeof(datetime_t))
-                        commonBranch;
-                    else
+                uint8_t newVal = mulAdd8(dig2, dig1, 10);
+                newVal = mulAdd8(dig3, newVal, 10);
+
+                STATIC_ASSERT(offsetof(mem_t, config) + sizeof(config_t) == offsetof(mem_t, initTime));
+                uint8_t *ptr = (uint8_t *)&mem.config + sizeof(config_t) + sizeof(datetime_t) - 2;
+                B_REG(ptr);
+                ptr -= addr;
+
+                if (pos == 0)
+                {
+                    if (addr >= sizeof(datetime_t) && newVal != *(ptr + 1))
                     {
                         *(ptr + 1) = newVal;
-                        datetime_t *initTimePtr = &mem.initTime;
-                        Y_REG(initTimePtr);
-
-                        uint8_t year = initTimePtr->year;
-                        uint8_t d = year;
-                        d += 3;
-                        d >>= 2;
-                        d += initTimePtr->day;
-                        uint16_t td = mulAdd16(d, year, 365);
-
-                        uint8_t month = initTimePtr->month;
-                        while (1)
-                        {
-                            month--;
-                            if (month == 0)
-                                break;
-                            R_REG(month);
-                            uint8_t temp;
-                            asm (
-                                "ldi %0, 29 \n"
-                                "sbrs %1, 0 \n"
-                                "sbrc %1, 1 \n"
-                                "ldi %0, 28 \n"
-                                : "=&d" (temp)
-                                : "r" (year)
-                            );
-                            if (month != 2)
-                            {
-                                uint8_t m = month;
-                                if (m & 0x08)
-                                    m = ~m;
-                                temp = (m & 1) + 30;
-                            }
-                            td += temp;
-                        }
-
-                        uint16_t tm = mulAdd8(initTimePtr->minute, initTimePtr->hour, 60);
-                        uint8_t s = initTimePtr->second;
-                        uint16_t t2s = mulAdd16(s >> 1, tm, 30);
-                        uint32_t time = mulAdd16(t2s, td, (uint16_t)24 * 60 * 30);
-                        asm (
-                            "lsr %1 \n"
-                            "adc %A0, %A0 \n"
-                            "adc %B0, %B0 \n"
-                            "adc %C0, %C0 \n"
-                            "adc %D0, %D0 \n"
-                            : "+r" (time), "+r" (s)
-                        );
-                        resetTimer(time, 0);
+                        eepromWrite(sizeof(config_t) + sizeof(datetime_t) - 1 - addr, newVal);
                     }
+
+                    uint8_t val = *ptr;
+                    dig3 = val % 10;
+                    uint8_t v = val / 10;
+                    R_REG(v);
+                    dig2 = v % 10;
+                    dig1 = v / 10;
+
+                    addr++;
+                    if (addr >= sizeof(config_t) + sizeof(datetime_t))
+                        break;
+
+                    commonBranch;
+                }
+                else if (addr >= sizeof(datetime_t))
+                    commonBranch;
+                else
+                {
+                    *(ptr + 1) = newVal;
+                    datetime_t *initTimePtr = &mem.initTime;
+                    Y_REG(initTimePtr);
+
+                    uint8_t year = initTimePtr->year;
+                    uint8_t d = year;
+                    d -= 1;
+                    *((int8_t *)&d) >>= 2;
+                    d += initTimePtr->day;
+                    uint16_t td = mulAdd16(d, year, 365);
+
+                    uint8_t month = initTimePtr->month;
+                    while (1)
+                    {
+                        month--;
+                        if (month == 0)
+                            break;
+                        R_REG(month);
+                        uint8_t temp;
+                        asm (
+                            "ldi %0, 29 \n"
+                            "sbrs %1, 0 \n"
+                            "sbrc %1, 1 \n"
+                            "ldi %0, 28 \n"
+                            : "=&d" (temp)
+                            : "r" (year)
+                        );
+                        if (month != 2)
+                        {
+                            uint8_t m = month;
+                            if (m & 0x08)
+                                m = ~m;
+                            temp = (m & 1) + 30;
+                        }
+                        td += temp;
+                    }
+
+                    uint16_t tm = mulAdd8(initTimePtr->minute, initTimePtr->hour, 60);
+                    uint8_t s = initTimePtr->second;
+                    uint16_t t2s = mulAdd16(s >> 1, tm, 30);
+                    uint32_t time = mulAdd16(t2s, td, (uint16_t)24 * 60 * 30);
+                    STATIC_ASSERT(L(-SEC_OFFSET) == 0);
+                    asm (
+                        "lsr %1 \n"
+                        "adc %A0, %A0 \n"
+                        "adc %B0, %B0 \n"
+                        "adc %C0, %C0 \n"
+                        "adc %D0, %D0 \n"
+                        "subi %B0, %2 \n"
+                        "sbci %C0, %3 \n"
+                        "sbci %D0, %4 \n"
+                        : "+d" (time), "+r" (s)
+                        : "M" (L(-SEC_OFFSET >> 8)), "M" (L(-SEC_OFFSET >> 16)), "M" (L(-SEC_OFFSET >> 24))
+                    );
+                    resetTimer(time, 0);
                 }
             }
 
@@ -345,9 +351,9 @@ int main()
             {
                 pos++;
                 pos &= 3;
-                if (pos != 0)
-                    p = pos;
             }
+            if (pos != 0)
+                p = pos;
 
             disp_t *dispPtr = &mem.disp;
             B_REG(dispPtr);

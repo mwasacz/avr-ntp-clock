@@ -12,8 +12,6 @@
 #include "config.h"
 #include "arithmetic.h"
 
-#define SEC_OFFSET  3155673600
-
 mem_t mem __attribute__((section(".noinit")));
 
 void resetTimer(uint32_t timInt, uint16_t timFrac)
@@ -86,7 +84,7 @@ void displayTime(uint32_t time)
         }
     }
 
-    uint8_t minute, hour, dow, year, month, day;
+    uint8_t minute, hour, dow, year, month, day, yearAlt;
     while (1)
     {
         uint16_t offset = mulAdd8(tz->offsetMinute, tz->offsetHour, 60);
@@ -165,27 +163,30 @@ void displayTime(uint32_t time)
         }
         day = td;
 
-        uint8_t d = day + 7;
+        uint8_t d = day;
         uint8_t endWeek = tz->endWeek;
-        uint8_t week = 5;
-        R_REG(week);
-        if (endWeek < 5 || d < temp)
-            week = d / 7;
+        if (endWeek >= 5)
+            d = d + 35 - temp;
+        uint8_t endDow = tz->endDow;
+        d = d + 7 + endDow - dow;
+        uint8_t week = d / 7;
 
         uint8_t endMinute = tz->endMinute;
         uint8_t endHour = tz->endHour;
-        uint8_t endDow = tz->endDow;
         uint8_t endMonth = tz->endMonth;
         asm (
-            "cp %1, %6 \n"
-            "cpc %2, %7 \n"
-            "cpc %3, %8 \n"
-            "cpc %4, %9 \n"
-            "cpc %5, %10 \n"
+            "cp %2, %8 \n"
+            "cpc %3, %9 \n"
+            "cpc %4, %10 \n"
+            "cpc %5, %11 \n"
+            "cpc %6, %12 \n"
+            "cpse %7, %1 \n"
+            "sbrs %0, 2 \n"
             "sbc %0, __zero_reg__ \n"
-            : "+r" (cnt)
-            : "r" (endMinute), "r" (endHour), "r" (endDow), "r" (endWeek), "r" (endMonth), "r" (minute), "r" (hour),
-            "r" (dow), "r" (week), "r" (month)
+            "mov %1, %7 \n"
+            : "+r" (cnt), "+r" (yearAlt)
+            : "r" (minute), "r" (hour), "r" (dow), "r" (week), "r" (month), "r" (year), "r" (endMinute), "r" (endHour),
+            "r" (endDow), "r" (endWeek), "r" (endMonth)
         );
         cnt >>= 1;
         if (cnt & 1)
@@ -250,10 +251,10 @@ void displayTime(uint32_t time)
         dispPtr->day[0] = day % 10;
         dispPtr->day[1] = day / 10;
 
-        flag |= (1 << DISP_OK);
         dispPtr->year[0] = year % 10;
         dispPtr->year[1] = year / 10;
         dispPtr->year[2] = 0;
         dispPtr->year[3] = 2;
+        flag |= (1 << DISP_OK);
     }
 }
