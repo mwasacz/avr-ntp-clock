@@ -33,8 +33,8 @@ extern void netInit(netstate_t *netstate);
 
 #define NTP_LEN                 48
 
-#define DHCP_DISCOVER_RENEW_LEN 250
-#define DHCP_REQUEST_LEN        262
+#define DHCP_DISCOVER_RENEW_LEN 248
+#define DHCP_REQUEST_LEN        260
 #define DHCP_OFFER_ACK_LEN      255
 
 #endif /* NET_H */

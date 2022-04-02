@@ -178,6 +178,12 @@ static void copyAddr(uint8_t d, uint8_t s)
     } while (--len);
 }
 
+static void __attribute__((noinline)) resetRetryTime()
+{
+    retryTimeH = 0;
+    retryTimeL = 0;
+}
+
 static uint16_t __attribute__((noinline)) timeFrac(uint16_t tcnt)
 {
     return UINT32(0, 0, L(tcnt), H(tcnt)) / TIMER_1S;
@@ -194,13 +200,13 @@ static void sendDhcpPacket(uint8_t state)
         *ptr = *ptr + 1;
 
         sum = (uint24_t)IP_PROTO_UDP_V + DHCP_DISCOVER_RENEW_LEN + UDP_HEADER_LEN + 67 + 68 + DHCP_DISCOVER_RENEW_LEN
-            + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0137 + 0x0401 + 0x032A + 0x64FF - 0xFFFF;
+            + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0137 + 0x0201 + 0x03FF;
     }
     else if (state == 2)
     {
         sum = (uint24_t)IP_PROTO_UDP_V + DHCP_REQUEST_LEN + UDP_HEADER_LEN + 67 + 68 + DHCP_REQUEST_LEN
             + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0332 + 0x0400 + 0x0036 + 0x0400 + 0x0037
-            + 0x0401 + 0x032A + 0x64FF - 0xFFFF;
+            + 0x0201 + 0x03FF - 0xFFFF;
         sum = UINT16(H(sum), L(sum));
 
         sum = addrChecksum(sum, memOffset(myIp));
@@ -212,7 +218,7 @@ static void sendDhcpPacket(uint8_t state)
     else // state == 3
     {
         sum = (uint24_t)IP_PROTO_UDP_V + DHCP_DISCOVER_RENEW_LEN + UDP_HEADER_LEN + 67 + 68 + DHCP_DISCOVER_RENEW_LEN
-            + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0337 + 0x0401 + 0x032A + 0x64FF - 0xFFFF;
+            + UDP_HEADER_LEN + 0x0101 + 0x0600 + 0x6382 + 0x5363 + 0x3501 + 0x0337 + 0x0201 + 0x03FF;
 
         sum = addrChecksum(sum, memOffset(myIp));
         sum = addrChecksum(sum, memOffset(myIp));
@@ -269,11 +275,9 @@ static void sendDhcpPacket(uint8_t state)
 
     // Parameter request list
     enc28j60WriteByte(55);
-    enc28j60WriteByte(4);
+    enc28j60WriteByte(2);
     enc28j60WriteByte(1);
     enc28j60WriteByte(3);
-    enc28j60WriteByte(42);
-    enc28j60WriteByte(100);
 
     // End option
     enc28j60WriteByte(0xFF);
@@ -647,8 +651,7 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
         copyAddr(memOffset(arpIp), arpPtr);
     } while (0);
 
-    retryTimeH = 0;
-    retryTimeL = 0;
+    resetRetryTime();
     netstate->retryCount = RETRY_COUNT;
 }
 
@@ -856,8 +859,7 @@ static void receiveArpPacket(netstate_t *netstate)
         if (checkAddr(memOffset(arpIp))) return; // Sender protocol address
 
         netstate->state = 5; // ToDo: check target IP, MAC ???
-        retryTimeH = 0;
-        retryTimeL = 0;
+        resetRetryTime();
         netstate->retryCount = RETRY_COUNT;
     }
 }
@@ -926,10 +928,9 @@ void netLoop(netstate_t *netstate)
     if (!enc28j60LinkUp())
     {
         netstate->state = 0;
-        return;
+        netstate->retryCount = 0;
     }
-
-    if (netstate->state == 0)
+    else if (netstate->state == 0)
     {
         *((uint8_t *)&mem.leaseTime + 1) = 0;
         *((uint8_t *)&mem.leaseTime) = 0;
@@ -937,8 +938,7 @@ void netLoop(netstate_t *netstate)
         R_REG(netstate->state);
         if (flag & (1 << CUSTOM_IP))
             netstate->state = 4;
-        retryTimeH = 0;
-        retryTimeL = 0;
+        resetRetryTime();
         netstate->retryCount = RETRY_COUNT;
     }
     else if (enc28j60PacketReceived()) // ToDo: deal with buffer overflow !!!
@@ -965,8 +965,8 @@ void netLoop(netstate_t *netstate)
         tx('\n');
 #endif
         netstate->state = 3;
-        retryTimeH = 0;
-        retryTimeL = 0;
+        R_REG(netstate->state);
+        resetRetryTime();
         netstate->retryCount = RETRY_COUNT;
     }
     else if (sync == 0 && netstate->state > 5)
@@ -977,8 +977,8 @@ void netLoop(netstate_t *netstate)
         tx('\n');
 #endif
         netstate->state = 4;
-        retryTimeH = 0;
-        retryTimeL = 0;
+        R_REG(netstate->state);
+        resetRetryTime();
         netstate->retryCount = RETRY_COUNT;
     }
 
@@ -994,6 +994,9 @@ void netLoop(netstate_t *netstate)
 #endif
         flag &= ~(1 << SYNC_OK);
     }
+
+    if (netstate->state == 0)
+        commonReturn5;
 
     if (!(flag & (1 << ARP_REPLY)))
     {
