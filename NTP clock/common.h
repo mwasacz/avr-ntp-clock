@@ -10,6 +10,7 @@
 
 #include <avr/io.h>
 #include <stddef.h>
+#include "config.h"
 #include "arithmetic.h"
 
 #define STATIC_ASSERT(x)    _Static_assert(x, #x)
@@ -27,9 +28,10 @@ typedef struct
 
 typedef struct
 {
-    uint8_t minute;
-    uint8_t hour;
-} hmtime_t;
+    uint8_t level;
+    uint8_t endMinute;
+    uint8_t endHour;
+} brightness_t;
 
 typedef struct
 {
@@ -60,8 +62,8 @@ typedef struct
     uint8_t gwIp[4];
     uint8_t myIp[4];
     uint8_t dstIp[4];
-    hmtime_t nightTime;
-    hmtime_t dayTime;
+    brightness_t nightBrightness;
+    brightness_t dayBrightness;
     timezone_t timezones[2];
 } config_t;
 
@@ -81,6 +83,7 @@ typedef struct
     uint8_t second[2];
     uint8_t minute[2];
     uint8_t hour[2];
+    uint8_t unused4;
 } disp_t;
 
 typedef struct
@@ -112,17 +115,18 @@ typedef struct
 
 extern mem_t mem;
 
-STATIC_ASSERT(offsetof(mem_t, disp) == 26);
-
 #ifdef __AVR_ATtiny4313__
 #define retryTime   _SFR_IO16(_SFR_IO_ADDR(GPIOR1))
 #define retryTimeH  GPIOR2
 #define retryTimeL  GPIOR1
+STATIC_ASSERT(((1 << OCF0A) | (1 << OCF0B) | (1 << TOV0)) == 7);
 #else
 #define retryTime   mem.retryTimeMem.u16
 #define retryTimeH  mem.retryTimeMem.u8[1]
 #define retryTimeL  mem.retryTimeMem.u8[0]
+STATIC_ASSERT(((1 << TOV1) | (1 << OCF0) | (1 << TOV0)) == 7);
 #endif
+STATIC_ASSERT(offsetof(mem_t, disp) == dispOffset);
 
 #define SEC_OFFSET  3155673600
 

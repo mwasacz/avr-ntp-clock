@@ -68,13 +68,15 @@ volatile config_t config EEMEM = {
     .gwIp = { 0, 0, 0, 0 }, // Obtain from DHCP
     .myIp = { 0, 0, 0, 0 }, // Obtain from DHCP
     .dstIp = { 17, 4, 130, 134 }, // timeserver.rwth-aachen.de
-    .nightTime = {
-        .minute = 0,
-        .hour = 22
+    .nightBrightness = {
+        .level = 4,
+        .endMinute = 0,
+        .endHour = 7
     },
-    .dayTime = {
-        .minute = 0,
-        .hour = 7
+    .dayBrightness = {
+        .level = 9,
+        .endMinute = 0,
+        .endHour = 22
     },
     .timezones = {
         {
@@ -115,10 +117,7 @@ int main()
 
     MCUCR = (1 << ISC10) | (1 << ISC00);
 
-    OCR0A = TIMER_DISP_N - 1;
-#if TIMER_DISP_D < 256
-    OCR0B = TIMER_DISP_D - 1;
-#endif
+    TCCR0A = (1 << WGM01) | (1 << WGM00);
     TCCR0B = (1 << CS01) | (1 << CS00);
 
 #else
@@ -139,24 +138,20 @@ int main()
 
     MCUCR = (1 << ISC10) | (1 << ISC00);
 
-    OCR0 = TIMER_DISP_N - 1;
-    TCCR0 = (1 << CS01) | (1 << CS00);
+    TCCR0 = (1 << WGM01) | (1 << WGM00) | (1 << CS01) | (1 << CS00);
 
 #endif
 
     OCR1A = TIMER_1S - 1;
     OCR1B = TIMER_1S / 2 - 1;
-    uint8_t tccr1b = (1 << CS12) | (1 << WGM12);
-    R_REG(tccr1b);
-    TCCR1B = tccr1b;
+    TCCR1B = (1 << CS12) | (1 << WGM12);
 
-#ifndef __AVR_ATtiny4313__
-    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0) | (1 << TOIE0);
-#elif TIMER_DISP_D < 256
-    TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << OCIE0B) | (1 << TOIE0);
-#else
     TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0);
-#endif
+
+    uint8_t blank = 15;
+    uint8_t p = (1 << SW_1) | (1 << SW_2);
+    R_REG(blank);
+    R_REG(p);
 
     eepromWait();
     uint8_t c = sizeof(config_t) - 1;
@@ -164,16 +159,13 @@ int main()
     STATIC_ASSERT(offsetof(mem_t, disp) + sizeof(config_t) <= sizeof(mem_t));
     uint8_t *dispPtr = (uint8_t *)&mem.disp + sizeof(config_t);
     uint8_t *configPtr = (uint8_t *)&mem.config + sizeof(config_t);
-    uint8_t blank = 15;
-    R_REG(blank);
     do
     {
         *--dispPtr = blank;
         *--configPtr = eepromRead(c);
     } while (--c != 0xFF);
 
-    STATIC_ASSERT(((1 << SW_1) | (1 << SW_2)) == ((1 << CS12) | (1 << WGM12)));
-    page = tccr1b;
+    page = p;
 
     while (1)
     {

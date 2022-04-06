@@ -14,6 +14,8 @@
 
 mem_t mem __attribute__((section(".noinit")));
 
+const __flash uint8_t brightnessVal[10] = { 128, 4, 12, 25, 45, 71, 104, 145, 195, 255 };
+
 void resetTimer(uint32_t timInt, uint16_t timFrac)
 {
     uint32_t *timePtr = &mem.time;
@@ -198,45 +200,44 @@ void displayTime(uint32_t time)
     B_REG(dispPtr);
     config_t *configPtr = (config_t *)((uint8_t *)dispPtr - offsetof(mem_t, disp) + offsetof(mem_t, config));
 
-    // (dayTime >= nightTime && (dayTime <= w || w < nightTime)) || (dayTime <= w && w < nightTime)
-    asm (
-        "cp %2, %4 \n"
-        "cpc %3, %5 \n"
-        "brcs cmp1_%= \n"
-        "cp %0, %2 \n"
-        "cpc %1, %3 \n"
-        "brcs cmp2_%= \n"
-        "rjmp day_%= \n"
-        "cmp1_%=:"
-        "cp %0, %2 \n"
-        "cpc %1, %3 \n"
-        "brcs night_%= \n"
-        "cmp2_%=:"
-        "cp %0, %4 \n"
-        "cpc %1, %5 \n"
-        "brcc night_%= \n"
-        "day_%=:"
-        "cbi %6, %7 \n"
-        "rjmp end_%= \n"
-        "night_%=:"
-        "sbi %6, %7 \n"
-        "end_%=:"
-        :
-        : "r" (minute), "r" (hour), "r" (configPtr->dayTime.minute), "r" (configPtr->dayTime.hour),
-        "r" (configPtr->nightTime.minute), "r" (configPtr->nightTime.hour), "I" (_SFR_IO_ADDR(flag)), "I" (DISP_NIGHT)
-    );
-    flag &= ~(1 << BLINK_LED);
-
     if (year >= 100)
     {
         dispPtr->year[0] = 15;
         dispPtr->year[1] = 15;
         dispPtr->year[2] = 15;
         dispPtr->year[3] = 15;
-        flag &= ~(1 << DISP_OK);
+        OCR0A = 0;
     }
     else
     {
+        uint8_t level = configPtr->dayBrightness.level;
+        asm (
+            "cp %4, %6 \n"
+            "cpc %5, %7 \n"
+            "brcs cmp1_%= \n"
+            "cp %2, %4 \n"
+            "cpc %3, %5 \n"
+            "brcs cmp2_%= \n"
+            "rjmp end_%= \n"
+            "cmp1_%=:"
+            "cp %2, %4 \n"
+            "cpc %3, %5 \n"
+            "brcs night_%= \n"
+            "cmp2_%=:"
+            "cp %2, %6 \n"
+            "cpc %3, %7 \n"
+            "brcs end_%= \n"
+            "night_%=:"
+            "ldd %0, %a1 + %8 \n"
+            "end_%=:"
+            : "+r" (level)
+            : "b" (dispPtr), "r" (minute), "r" (hour), "r" (configPtr->nightBrightness.endMinute),
+            "r" (configPtr->nightBrightness.endHour), "r" (configPtr->dayBrightness.endMinute),
+            "r" (configPtr->dayBrightness.endHour),
+            "I" (offsetof(mem_t, config.nightBrightness.level) - offsetof(mem_t, disp))
+        );
+        OCR0A = brightnessVal[level];
+
         dispPtr->second[0] = second % 10;
         dispPtr->second[1] = second / 10;
         dispPtr->minute[0] = minute % 10;
@@ -255,6 +256,6 @@ void displayTime(uint32_t time)
         dispPtr->year[1] = year / 10;
         dispPtr->year[2] = 0;
         dispPtr->year[3] = 2;
-        flag |= (1 << DISP_OK);
     }
+    flag &= ~(1 << BLINK_LED);
 }
