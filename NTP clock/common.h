@@ -71,14 +71,14 @@ typedef struct
 {
     uint8_t menu[6];
     uint16_t unused1;
-    uint8_t state;
-    uint8_t blank1;
-    uint8_t year[4];
-    uint16_t unused2;
     uint8_t dow;
-    uint8_t blank2;
+    uint8_t blank1;
     uint8_t month[2];
     uint8_t day[2];
+    uint16_t unused2;
+    uint8_t state;
+    uint8_t blank2;
+    uint8_t year[4];
     uint16_t unused3;
     uint8_t second[2];
     uint8_t minute[2];

@@ -19,7 +19,7 @@ sel:
 
 .global TIMER1_COMPB_vect
 TIMER1_COMPB_vect:
-    sbi _SFR_IO_ADDR(flag), BLINK_LED
+    cbi _SFR_IO_ADDR(flag), BLINK_LED
     reti
 
 .global TIMER0_OVF_vect
@@ -35,7 +35,7 @@ TIMER0_OVF_vect:
     in ZH, _SFR_IO_ADDR(OCR0A)
     subi ZH, 1
     brcc 2f
-    ldi ZL, 8
+    ldi ZL, 16
 1:  cbi _SFR_IO_ADDR(flag), DISP_BLANK
 2:  ldi ZH, 7
     out _SFR_IO_ADDR(TIFR), ZH
@@ -47,11 +47,11 @@ TIMER0_OVF_vect:
 #endif
     cpi ZL, 24
     sbic _SFR_IO_ADDR(flag), SYNC_OK
-    sbis _SFR_IO_ADDR(flag), BLINK_LED
+    sbic _SFR_IO_ADDR(flag), BLINK_LED
     brcc 2f
-1:  sbi _SFR_IO_ADDR(MAIN_PORT), LED
+1:  cbi _SFR_IO_ADDR(MAIN_PORT), LED
     rjmp 3f
-2:  cbi _SFR_IO_ADDR(MAIN_PORT), LED
+2:  sbi _SFR_IO_ADDR(MAIN_PORT), LED
 3:  subi ZH, 1
     brcc 1f
 #ifdef __AVR_ATtiny4313__
@@ -117,7 +117,7 @@ TIMER0_COMP_vect:
     ldi r24, DISP_SEG
     out _SFR_IO_ADDR(DISP_SEG_PORT), r24
 #endif
-    sbi _SFR_IO_ADDR(MAIN_PORT), LED
+    cbi _SFR_IO_ADDR(MAIN_PORT), LED
     rjmp isr_end
 
 .global TIMER1_COMPA_vect

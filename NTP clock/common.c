@@ -257,5 +257,5 @@ void displayTime(uint32_t time)
         dispPtr->year[2] = 0;
         dispPtr->year[3] = 2;
     }
-    flag &= ~(1 << BLINK_LED);
+    flag |= (1 << BLINK_LED);
 }

@@ -109,7 +109,7 @@ int main()
     DISP_CS_PORT = (1 << CS) | DISP_SEL | DISP_SEG;
     DISP_CS_DDR = (1 << CS) | DISP_SEL | DISP_SEG;
 
-    MAIN_PORT = (1 << LED) | (1 << SW_1) | (1 << SW_2) | (1 << PWR_SENSE);
+    MAIN_PORT = (1 << SW_1) | (1 << SW_2) | (1 << PWR_SENSE);
     MAIN_DDR = (1 << LED) | (1 << SPI_SI) | (1 << SPI_SCK);
 
     ACSR |= (1 << ACD);
@@ -122,7 +122,7 @@ int main()
 
 #else
 
-    MAIN_PORT = (1 << LED) | (1 << TX) | (1 << SW_1) | (1 << SW_2) | (1 << CS);
+    MAIN_PORT = (1 << TX) | (1 << SW_1) | (1 << SW_2) | (1 << CS);
     MAIN_DDR = (1 << LED) | (1 << TX) | (1 << SPI_SI) | (1 << SPI_SCK) | (1 << CS);
 
     DISP_SEL_PORT = (1 << SW_DISP_SEL) | DISP_SEL;
@@ -148,9 +148,7 @@ int main()
 
     TIMSK = (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0);
 
-    uint8_t blank = 15;
     uint8_t p = (1 << SW_1) | (1 << SW_2);
-    R_REG(blank);
     R_REG(p);
 
     eepromWait();
@@ -159,6 +157,8 @@ int main()
     STATIC_ASSERT(offsetof(mem_t, disp) + sizeof(config_t) <= sizeof(mem_t));
     uint8_t *dispPtr = (uint8_t *)&mem.disp + sizeof(config_t);
     uint8_t *configPtr = (uint8_t *)&mem.config + sizeof(config_t);
+    uint8_t blank = 15;
+    R_REG(blank);
     do
     {
         *--dispPtr = blank;
@@ -184,7 +184,7 @@ int main()
                 mem.disp.state = netstate.state;
             } while (debounce());
             uint8_t b = MAIN_PIN;
-            b &= (1 << SW_2) | (1 << SW_1);
+            b &= (1 << SW_1) | (1 << SW_2);
             if (b == 0)
                 break;
             page = b;
@@ -207,7 +207,7 @@ int main()
 
         while (1)
         {
-            if (btn & (1 << SW_1))
+            if (btn & (1 << SW_2))
             {
                 do
                 {
@@ -339,7 +339,7 @@ int main()
 
             uint8_t p = 15;
             R_REG(p);
-            if (btn & (1 << SW_2))
+            if (btn & (1 << SW_1))
             {
                 pos++;
                 pos &= 3;
@@ -366,6 +366,6 @@ int main()
 
         flag &= ~(1 << SYNC_OK);
         flag &= ~(1 << CUSTOM_IP);
-        page = old & ((1 << SW_2) | (1 << SW_1));
+        page = old & ((1 << SW_1) | (1 << SW_2));
     }
 }
