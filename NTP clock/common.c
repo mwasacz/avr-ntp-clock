@@ -243,14 +243,20 @@ void displayTime(uint32_t time)
         dispPtr->minute[0] = minute % 10;
         dispPtr->minute[1] = minute / 10;
         dispPtr->hour[0] = hour % 10;
-        dispPtr->hour[1] = hour / 10;
+        uint8_t h = hour / 10;
+        if (h == 0)
+            h = 15;
+        dispPtr->hour[1] = h;
         dispPtr->dow = dow;
 
         dispPtr->month[0] = month % 10;
         dispPtr->month[1] = month / 10;
         day++;
         dispPtr->day[0] = day % 10;
-        dispPtr->day[1] = day / 10;
+        uint8_t d = day / 10;
+        if (d == 0)
+            d = 15;
+        dispPtr->day[1] = d;
 
         dispPtr->year[0] = year % 10;
         dispPtr->year[1] = year / 10;

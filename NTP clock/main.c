@@ -19,6 +19,15 @@
 
 #define commonBranch    asm ("")
 
+FUSES = {
+    .low = LFUSE,
+    .high = HFUSE
+#ifdef __AVR_ATtiny4313__
+    ,
+    .extended = EFUSE
+#endif
+};
+
 static uint8_t debounce()
 {
     uint8_t gifr = (1 << INTF0) | (1 << INTF1);

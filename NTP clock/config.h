@@ -22,6 +22,15 @@
 #endif
 #endif
 
+#ifdef __AVR_ATtiny4313__
+#define LFUSE           FUSE_SUT1
+#define HFUSE           (FUSE_EESAVE & FUSE_SPIEN & FUSE_BODLEVEL1 & FUSE_BODLEVEL0)
+#define EFUSE           0xFF
+#else
+#define LFUSE           (FUSE_BODLEVEL & FUSE_BODEN & FUSE_SUT1)
+#define HFUSE           (FUSE_SPIEN & FUSE_CKOPT & FUSE_EESAVE & FUSE_BOOTSZ1 & FUSE_BOOTSZ0)
+#endif
+
 #define MAIN_DDR        DDRD
 #define MAIN_PORT       PORTD
 #define MAIN_PIN        PIND

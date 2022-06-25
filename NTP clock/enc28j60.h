@@ -184,6 +184,12 @@
 #define MACON3_HFRMLEN  0x04
 #define MACON3_FRMLNEN  0x02
 #define MACON3_FULDPX   0x01
+// ENC28J60 MACON4 Register Bit Definitions
+#define MACON4_DEFER    0x40
+#define MACON4_BPEN     0x20
+#define MACON4_NOBKOFF  0x10
+#define MACON4_LONGPRE  0x02
+#define MACON4_PUREPRE  0x01
 // ENC28J60 MICMD Register Bit Definitions
 #define MICMD_MIISCAN   0x02
 #define MICMD_MIIRD     0x01
@@ -241,23 +247,23 @@
 #define RXSTART_INIT    0x0000
 // End of receive buffer - must be odd number
 #define RXSTOP_INIT     (0x1FFF - 0x0600)
-// Start of transmit buffer - after RXSTOP_INIT with space for one full Ethernet frame (1500 bytes)
+// Start of transmit buffer - after RXSTOP_INIT with space for one full Ethernet frame (1518 bytes)
 #define TXSTART_INIT    (0x1FFF - 0x0600 + 1)
 // End of TX buffer - at end of memory
 #define TXSTOP_INIT     0x1FFF
 
 // Max frame length which the controller will accept
-// Note: maximum Ethernet frame length would be 1518
-#define MAX_FRAMELEN    1500
+#define MAX_FRAMELEN    1518
 
 extern uint8_t spiTransfer(uint8_t data);
 extern uint8_t spiTransferZero();
-extern void enc28j60Init(uint8_t *myMac);
+extern uint8_t enc28j60Init(uint8_t *myMac);
 extern uint8_t enc28j60PacketReceived();
 extern uint16_t enc28j60ReadPacket(uint16_t *nextPacketPtr);
 extern void enc28j60EndRead(uint16_t *nextPacketPtr);
 extern void enc28j60WritePacket(uint16_t txnd);
-extern void enc28j60EndWrite();
+extern void enc28j60EndWrite(uint16_t txnd);
+extern uint8_t enc28j60Ready();
 extern uint8_t enc28j60LinkUp();
 
 #endif /* ENC28J60_H */
