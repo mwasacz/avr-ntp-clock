@@ -25,6 +25,17 @@ TIMER1_COMPB_vect:
 .global TIMER0_OVF_vect
 TIMER0_OVF_vect:
     push r24
+#ifdef __AVR_ATtiny4313__
+    ldi r24, DISP_SEL | DISP_SEG
+    sbic _SFR_IO_ADDR(DISP_CS_PORT), CS
+    ldi r24, DISP_SEL | DISP_SEG | (1 << CS)
+    out _SFR_IO_ADDR(DISP_CS_PORT), r24
+#else
+    ldi r24, DISP_SEL | (1 << SW_DISP_SEL)
+    out _SFR_IO_ADDR(DISP_SEL_PORT), r24
+    ldi r24, DISP_SEG
+    out _SFR_IO_ADDR(DISP_SEG_PORT), r24
+#endif
     in r24, _SFR_IO_ADDR(SREG)
     push ZL
     push ZH
@@ -94,7 +105,8 @@ TIMER0_OVF_vect:
 1:  pop ZH
     pop ZL
     out _SFR_IO_ADDR(SREG), r24
-    rjmp isr_end
+    pop r24
+    reti
 
 #ifdef __AVR_ATtiny4313__
 .global TIMER0_COMPA_vect
@@ -118,7 +130,8 @@ TIMER0_COMP_vect:
     out _SFR_IO_ADDR(DISP_SEG_PORT), r24
 #endif
     cbi _SFR_IO_ADDR(MAIN_PORT), LED
-    rjmp isr_end
+    pop r24
+    reti
 
 .global TIMER1_COMPA_vect
 TIMER1_COMPA_vect:
@@ -161,7 +174,5 @@ TIMER1_COMPA_vect:
     ldi r24, (1 << OCIE1A) | (1 << OCIE1B) | (1 << OCIE0A) | (1 << TOIE0)
     cli
     out _SFR_IO_ADDR(TIMSK), r24
-
-isr_end:
     pop r24
     reti
