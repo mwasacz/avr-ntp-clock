@@ -1,10 +1,3 @@
-/*
- * arithmetic.h
- *
- * Created: 28.01.2022 21:22:38
- *  Author: Mikolaj
- */
-
 #ifndef COMMON_H
 #define COMMON_H
 
@@ -15,10 +8,21 @@
 
 #define STATIC_ASSERT(x)    _Static_assert(x, #x)
 
+// Force variable to be allocated to a specific register class
+// This sometimes prevents optimizations that lead to higher overall code size
 #define R_REG(x)            asm ("" : "+r" (x))
 #define B_REG(x)            asm ("" : "+b" (x))
 #define Y_REG(x)            asm ("" : "+y" (x))
 
+// Data required by the net module, including the state variable
+// State 0 - ENC28J60 not responding
+// State 1 - Network cable disconnected
+// State 2 - Waiting for DHCP offer
+// State 3 - Waiting for DHCP ack
+// State 4 - Waiting for DHCP ack (renew)
+// State 5 - Waiting for ARP reply
+// State 6 - Waiting for NTP reply
+// State 7 - Synchronized
 typedef struct
 {
     uint8_t retryCount;
@@ -26,6 +30,7 @@ typedef struct
     uint16_t nextPacketPtr;
 } netstate_t;
 
+// Brightness setting for daytime or nighttime (also stores when daytime or nighttime ends)
 typedef struct
 {
     uint8_t level;
@@ -33,6 +38,7 @@ typedef struct
     uint8_t endHour;
 } brightness_t;
 
+// Date and time
 typedef struct
 {
     uint8_t second;
@@ -43,6 +49,7 @@ typedef struct
     uint8_t year;
 } datetime_t;
 
+// Timezone data as offset from UTC (also stores date and time when the timezone ends)
 typedef struct
 {
     uint8_t endMinute;
@@ -55,6 +62,7 @@ typedef struct
     uint8_t offsetAdd;
 } timezone_t;
 
+// Configuration data stored in EEPROM
 typedef struct
 {
     uint8_t myMac[6];
@@ -67,6 +75,8 @@ typedef struct
     timezone_t timezones[2];
 } config_t;
 
+// Display buffers, organized as four 6-byte pages
+// Pages are aligned to 8-byte blocks and at least one byte after each page must be blank (set to 15)
 typedef struct
 {
     uint8_t menu[6];
@@ -86,6 +96,9 @@ typedef struct
     uint8_t unused4;
 } disp_t;
 
+// Struct that holds all global variables
+// This allows using 1-byte offsets within mem_t instead of 2-byte pointers
+// All 6-byte addresses must be placed before 4-byte addresses (including nested structs)
 typedef struct
 {
     uint8_t timestamp[6];
@@ -110,12 +123,15 @@ typedef struct
 #endif
 } mem_t;
 
+// Size of struct member
 #define memberSize(type, member)    sizeof(((type *)0)->member)
+// Offset of member within mem (returns first byte past the member, should be used with pre-decrement operations)
 #define memOffset(member)           (offsetof(mem_t, member) + memberSize(mem_t, member))
 
 extern mem_t mem;
 
 #ifdef __AVR_ATtiny4313__
+// Store retryTime in unused IO register pair
 #define retryTime   _SFR_IO16(_SFR_IO_ADDR(GPIOR1))
 #define retryTimeH  GPIOR2
 #define retryTimeL  GPIOR1
@@ -128,8 +144,10 @@ STATIC_ASSERT(((1 << TOV1) | (1 << OCF0) | (1 << TOV0)) == 7);
 #endif
 STATIC_ASSERT(offsetof(mem_t, disp) == dispOffset);
 
+// Difference in seconds between 1900-01-01 (NTP epoch) and 2000-01-01
 #define SEC_OFFSET  3155673600
 
+// Timeout constants
 #define RETRY_COUNT     5
 #define RETRY_TIMEOUT_S 15
 #define RETRY_TIMEOUT_L 900
@@ -138,4 +156,4 @@ STATIC_ASSERT(offsetof(mem_t, disp) == dispOffset);
 extern void resetTimer(uint32_t timInt, uint16_t timFrac);
 extern void displayTime(uint32_t time);
 
-#endif /* COMMON_H */
+#endif // COMMON_H

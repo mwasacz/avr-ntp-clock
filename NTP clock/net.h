@@ -1,10 +1,3 @@
-/*
- * net.h
- *
- * Created: 01.07.2018 12:22:28
- *  Author: Mikolaj
- */
-
 #ifndef NET_H
 #define NET_H
 
@@ -13,6 +6,8 @@
 extern void netTick();
 extern void netLoop(netstate_t *netstate);
 extern void netInit(netstate_t *netstate);
+
+// Protocol constants
 
 #define CRC_LEN                 4
 
@@ -37,4 +32,4 @@ extern void netInit(netstate_t *netstate);
 #define DHCP_REQUEST_LEN        260
 #define DHCP_OFFER_ACK_LEN      255
 
-#endif /* NET_H */
+#endif // NET_H

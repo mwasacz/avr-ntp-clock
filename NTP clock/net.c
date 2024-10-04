@@ -1,10 +1,3 @@
-/*
- * net.c
- *
- * Created: 01.07.2018 14:32:04
- *  Author: Mikolaj
- */
-
 #include "net.h"
 
 #include <avr/io.h>
@@ -14,6 +7,9 @@
 #include "arithmetic.h"
 #include "enc28j60.h"
 
+// If commonReturnX is used multiple times, the compiler recognizes it as common code
+// This way, multiple relative branch instructions can point to a single relative jump
+// Inserted based on analyzing the disassembly
 #define commonReturn1   do { asm (""); return; } while (0)
 #define commonReturn2   do { asm (" "); return; } while (0)
 #define commonReturn3   do { asm ("  "); return; } while (0)
@@ -22,18 +18,23 @@
 
 #ifdef __AVR_ATtiny4313__
 
+// Read byte from ENC28J60 buffer
 #define enc28j60ReadByte()      spiTransferZero()
+// Write byte to ENC28J60 buffer
 #define enc28j60WriteByte(data) spiTransfer(data)
+// Write 0x00 to ENC28J60 buffer (requires less overhead to call)
 #define enc28j60WriteByteZero() spiTransferZero()
 
 #else
 
+// Send byte via UART
 static void tx(uint8_t data)
 {
     while (!(UCSRA & (1 << UDRE)));
     UDR = data;
 }
 
+// Send byte via UART as two hexadecimal digits
 static void txHex(uint8_t data)
 {
     uint8_t hi = (data >> 4) + '0';
@@ -46,6 +47,7 @@ static void txHex(uint8_t data)
     tx(lo);
 }
 
+// Read byte from ENC28J60 buffer
 static uint8_t enc28j60ReadByte()
 {
     uint8_t data = spiTransferZero();
@@ -53,12 +55,14 @@ static uint8_t enc28j60ReadByte()
     return data;
 }
 
+// Write byte to ENC28J60 buffer
 static void enc28j60WriteByte(uint8_t data)
 {
     spiTransfer(data);
     txHex(data);
 }
 
+// Write 0x00 to ENC28J60 buffer (requires less overhead to call)
 static void enc28j60WriteByteZero()
 {
     spiTransferZero();
@@ -67,6 +71,7 @@ static void enc28j60WriteByteZero()
 
 #endif
 
+// Read len bytes from ENC28J60 buffer and return the last byte
 static uint8_t readBytes(uint8_t len)
 {
     uint8_t ret;
@@ -78,8 +83,13 @@ static uint8_t readBytes(uint8_t len)
 }
 
 #ifdef __AVR_ATtiny4313__
+
+// Write 0x00 length times to ENC28J60 buffer
 #define writeZeros(length)  readBytes(length)
+
 #else
+
+// Write 0x00 len times to ENC28J60 buffer
 static void writeZeros(uint8_t len)
 {
     do
@@ -87,8 +97,10 @@ static void writeZeros(uint8_t len)
         enc28j60WriteByteZero();
     } while (--len);
 }
+
 #endif
 
+// Write 0xFF len times to ENC28J60 buffer
 static void writeFFs(uint8_t len)
 {
     do
@@ -97,6 +109,7 @@ static void writeFFs(uint8_t len)
     } while (--len);
 }
 
+// Return length of data at memOffset p (4 or 6 bytes, depending on p)
 static uint8_t __attribute__((noinline)) addrLength(uint8_t p)
 {
     if (p <= memOffset(config.myMac))
@@ -105,6 +118,7 @@ static uint8_t __attribute__((noinline)) addrLength(uint8_t p)
         return 4;
 }
 
+// Write data at memOffset p to ENC28J60 buffer (4 or 6 bytes, depending on p)
 static void writeAddr(uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&mem + p;
@@ -116,6 +130,7 @@ static void writeAddr(uint8_t p)
     } while (--len);
 }
 
+// Update checksum with data at memOffset p (4 or 6 bytes, depending on p)
 static uint16_t addrChecksum(uint16_t sum, uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&mem + p;
@@ -143,6 +158,7 @@ static uint16_t addrChecksum(uint16_t sum, uint8_t p)
     return sum;
 }
 
+// Read data from ENC28J60 buffer and write at memOffset p (4 or 6 bytes, depending on p)
 static void readAddr(uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&mem + p;
@@ -154,6 +170,7 @@ static void readAddr(uint8_t p)
     } while (--len);
 }
 
+// Read data from ENC28J60 buffer and compare to data at memOffset p (4 or 6 bytes, depending on p), return 0 if equal
 static uint8_t checkAddr(uint8_t p)
 {
     uint8_t *ptr = (uint8_t *)&mem + p;
@@ -166,6 +183,7 @@ static uint8_t checkAddr(uint8_t p)
     return len;
 }
 
+// Copy data from memOffset s to memOffset d (4 bytes, regardless of p)
 static void copyAddr(uint8_t d, uint8_t s)
 {
     uint8_t *dst = (uint8_t *)&mem + d;
@@ -178,24 +196,27 @@ static void copyAddr(uint8_t d, uint8_t s)
     } while (--len);
 }
 
+// Reset retry timer
 static void __attribute__((noinline)) resetRetryTime()
 {
     retryTimeH = 0;
     retryTimeL = 0;
 }
 
+// Convert timer value into 16-bit fraction
 static uint16_t __attribute__((noinline)) timeFrac(uint16_t tcnt)
 {
     return UINT32(0, 0, L(tcnt), H(tcnt)) / TIMER_1S;
 }
 
+// Write DHCP payload, with data depending on state
 static void sendDhcpPacket(uint8_t state)
 {
     // UDP checksum
     uint16_t sum;
     if (state == 2)
     {
-        uint32_t* ptr = (uint32_t*)&mem.xid;
+        uint32_t *ptr = (uint32_t *)&mem.xid;
         B_REG(ptr);
         *ptr = *ptr + 1;
 
@@ -283,18 +304,22 @@ static void sendDhcpPacket(uint8_t state)
     enc28j60WriteByte(0xFF);
 }
 
+// Write NTP payload
 static void sendNtpPacket(uint8_t state)
 {
     uint8_t src = memOffset(time);
     uint8_t dst = memOffset(timestamp);
     R_REG(src);
     R_REG(dst);
+
+    // Save transmit timestamp
     cli();
     uint16_t tcnt = TCNT1;
     uint8_t tifr = TIFR;
     copyAddr(dst, src);
     sei();
 
+    // Convert timer value into fraction
     if (tifr & (1 << OCF1A))
         tcnt = TIMER_1S - 1;
     uint16_t f = timeFrac(tcnt);
@@ -317,6 +342,7 @@ static void sendNtpPacket(uint8_t state)
     writeZeros(2);
 }
 
+// Write UDP header and payload, with data depending on state
 static void sendUdpPacket(uint16_t len, uint8_t state)
 {
     enc28j60WriteByteZero(); // Source port H // ToDo: consider variable Source port higher than 1024
@@ -344,6 +370,7 @@ static void sendUdpPacket(uint16_t len, uint8_t state)
         sendDhcpPacket(state);
 }
 
+// Write IP header and payload, with data depending on state
 static void sendIpPacket(uint16_t len, uint8_t state)
 {
     enc28j60WriteByte(0x45); // Version, IHL
@@ -354,10 +381,12 @@ static void sendIpPacket(uint16_t len, uint8_t state)
     enc28j60WriteByte(H(len)); // Length H
     enc28j60WriteByte(L(len)); // L
 
+    // Increment Id
     uint16_t *ptr = &mem.ipId;
     B_REG(ptr);
     uint16_t id = *ptr + 1;
     *ptr = id;
+
     enc28j60WriteByte(H(id)); // Id H
     enc28j60WriteByte(L(id)); // L
 
@@ -378,7 +407,6 @@ static void sendIpPacket(uint16_t len, uint8_t state)
         : "+r" (sum)
         : "r" (id)
     );
-
     if (state > 3)
         sum = addrChecksum(sum, memOffset(myIp));
     if (state == 6)
@@ -401,6 +429,7 @@ static void sendIpPacket(uint16_t len, uint8_t state)
     sendUdpPacket(len, state);
 }
 
+// Write ARP payload
 static void sendArpPacket(uint8_t state)
 {
     enc28j60WriteByteZero(); // Hardware type H
@@ -433,6 +462,7 @@ static void sendArpPacket(uint8_t state)
     }
 }
 
+// Write Ethernet header and payload, with data depending on state
 static void sendEthPacket(uint16_t len, uint8_t state)
 {
     // Destination MAC
@@ -461,6 +491,7 @@ static void sendEthPacket(uint16_t len, uint8_t state)
     }
 }
 
+// Send network packet, with data depending on state
 static void sendPacket(uint8_t state)
 {
     uint16_t addr = TXSTART_INIT;
@@ -488,6 +519,7 @@ static void sendPacket(uint8_t state)
 #endif
 }
 
+// Read DHCP payload and process it
 static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
 {
     if (len < DHCP_OFFER_ACK_LEN + UDP_HEADER_LEN) commonReturn1;
@@ -524,6 +556,8 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
     uint8_t found = 0;
     uint8_t type = 0;
     uint16_t readLen = 240 + UDP_HEADER_LEN;
+
+    // Option parsing loop
     while (1) // ToDo: get NTP server addr and timezone from DHCP
     {
         uint8_t one = 1;
@@ -531,7 +565,7 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
         readLen += one;
         if (readLen > len) commonReturn2;
         uint8_t code = enc28j60ReadByte();
-        if (code == 0xFF)
+        if (code == 0xFF) // End option
             break;
         if (code)
         {
@@ -542,14 +576,14 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
             if (readLen > len) commonReturn2;
             if (l == 4)
             {
-                if (code == 1)
+                if (code == 1) // Subnet mask
                 {
                     if (found & 0x01) return;
                     readAddr(memOffset(netmask));
                     found |= 0x01;
                     continue;
                 }
-                if (code == 51)
+                if (code == 51) // IP address lease time
                 {
                     if (found & 0x08) return;
                     uint8_t b3 = enc28j60ReadByte();
@@ -575,7 +609,7 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
                     found |= 0x08;
                     continue;
                 }
-                if (code == 54)
+                if (code == 54) // Server identifier
                 {
                     if (found & 0x10) return;
                     if (netstate->state == 2)
@@ -586,14 +620,14 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
                     continue;
                 }
             }
-            if (l >= 4 && code == 3)
+            if (l >= 4 && code == 3) // Router option
             {
                 if (found & 0x02) return;
                 readAddr(memOffset(gwIp));
                 found |= 0x02;
                 l -= 4;
             }
-            if (l == 1 && code == 53)
+            if (l == 1 && code == 53) // DHCP message type
             {
                 if (found & 0x04) return;
                 type = enc28j60ReadByte();
@@ -606,6 +640,7 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
         }
     }
 
+    // Dummy loop just to allow breaking out of it (this construction results in the smallest code size)
     do
     {
         if (type == 6)
@@ -621,7 +656,10 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
         R_REG(arpPtr);
         R_REG(c);
 
+        // Verify that all required options have been found
         if (found < 0x1C) commonReturn3;
+
+        // Determine the address for ARP request (whether to route via gateway)
         if (found & 0x01)
         {
             uint8_t *pd = mem.config.dstIp + 4;
@@ -659,6 +697,7 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
     netstate->retryCount = RETRY_COUNT;
 }
 
+// Read NTP payload and process it
 static void receiveNtpPacket(netstate_t *netstate)
 {
     // LI, VN, Mode
@@ -682,12 +721,12 @@ static void receiveNtpPacket(netstate_t *netstate)
     B_REG(timestampPtr);
     uint32_t *timePtr = (uint32_t *)(timestampPtr - offsetof(mem_t, timestamp) + offsetof(mem_t, time));
 
+    // Calculate destination timestamp
     cli(); // ToDo: read timestamp immediately after receiving packet
     uint16_t tcnt = TCNT1;
     uint8_t tifr = TIFR;
     uint32_t timInt = *timePtr;
     sei();
-
     if (tifr & (1 << OCF1A))
         tcnt = TIMER_1S - 1;
     uint16_t timFrac = timeFrac(tcnt);
@@ -695,7 +734,6 @@ static void receiveNtpPacket(netstate_t *netstate)
     uint8_t temp[6] = { timestampPtr[0], timestampPtr[1], timestampPtr[2], timestampPtr[3], timestampPtr[4],
         timestampPtr[5] };
 
-    // (timInt, timFrac) -= (temp[5], temp[4], temp[3], temp[2], temp[1], temp[0]);
     asm (
         "sub %A0, %2 \n"
         "sbc %B0, %3 \n"
@@ -715,7 +753,6 @@ static void receiveNtpPacket(netstate_t *netstate)
     temp[1] = enc28j60ReadByte();
     temp[0] = enc28j60ReadByte();
 
-    // (timInt, timFrac) += (temp[5], temp[4], temp[3], temp[2], temp[1], temp[0]);
     asm (
         "add %A0, %2 \n"
         "adc %B0, %3 \n"
@@ -735,8 +772,6 @@ static void receiveNtpPacket(netstate_t *netstate)
     temp[1] = enc28j60ReadByte();
     temp[0] = enc28j60ReadByte();
 
-    // (timInt, timFrac) += (temp[5], temp[4], temp[3], temp[2], temp[1], temp[0]);
-    // (timInt, timFrac) >>= 1;
     asm (
         "add %A0, %2 \n"
         "adc %B0, %3 \n"
@@ -754,8 +789,8 @@ static void receiveNtpPacket(netstate_t *netstate)
         : "r" (temp[0]), "r" (temp[1]), "r" (temp[2]), "r" (temp[3]), "r" (temp[4]), "r" (temp[5])
     );
 
+    // Set time
     u32_t resTcnt = { .u32 = mulAdd16(0, timFrac, TIMER_1S) };
-
     resetTimer(timInt, resTcnt.u16[1]);
 
     netstate->state = 7;
@@ -766,6 +801,7 @@ static void receiveNtpPacket(netstate_t *netstate)
 #endif
 }
 
+// Read UDP header and payload and process it
 static void receiveUdpPacket(uint16_t len, netstate_t *netstate)
 {
     // Source port
@@ -801,6 +837,7 @@ static void receiveUdpPacket(uint16_t len, netstate_t *netstate)
     }
 }
 
+// Read IP header and payload and process it
 static void receiveIpPacket(uint16_t len, netstate_t *netstate)
 {
     if (enc28j60ReadByte() != 0x45) commonReturn4; // Version, IHL
@@ -835,6 +872,7 @@ static void receiveIpPacket(uint16_t len, netstate_t *netstate)
     receiveUdpPacket(ipLen - IP_HEADER_LEN, netstate);
 }
 
+// Read ARP payload and process it
 static void receiveArpPacket(netstate_t *netstate)
 {
     if (enc28j60ReadByte() != 0) return; // Hardware type H
@@ -868,6 +906,7 @@ static void receiveArpPacket(netstate_t *netstate)
     }
 }
 
+// Read Ethernet header and payload and process it
 static void receiveEthPacket(uint16_t len, netstate_t *netstate)
 {
     if (len < ARP_LEN + ETH_HEADER_LEN + CRC_LEN) commonReturn4;
@@ -891,6 +930,7 @@ static void receiveEthPacket(uint16_t len, netstate_t *netstate)
         receiveArpPacket(netstate);
 }
 
+// Receive network packet and process it
 static void receivePacket(netstate_t *netstate)
 {
     uint16_t len = enc28j60ReadPacket(&netstate->nextPacketPtr);
@@ -902,6 +942,7 @@ static void receivePacket(netstate_t *netstate)
 #endif
 }
 
+// Update timers and display, should be called every second
 void netTick()
 {
     uint32_t *timePtr = &mem.time;
@@ -909,28 +950,32 @@ void netTick()
     uint16_t *leaseTimePtr = (uint16_t *)((uint8_t *)timePtr - offsetof(mem_t, time) + offsetof(mem_t, leaseTime));
     uint16_t *syncTimePtr = (uint16_t *)((uint8_t *)timePtr - offsetof(mem_t, time) + offsetof(mem_t, syncTime));
 
+    // Decrement timers if nonzero
     if (*leaseTimePtr)
         (*leaseTimePtr)--;
-
     if (*syncTimePtr)
         (*syncTimePtr)--;
-
     uint16_t temp = retryTime;
     if (temp)
         retryTime = temp - 1;
 
+    // Increment time
     uint32_t time = *timePtr + 1;
     *timePtr = time;
     R_REG(time);
 
+    // Update display if time is valid
     if (flag & (1 << TIME_OK))
         displayTime(time);
 }
 
+// Process network communications (sending and receiving packets)
 void netLoop(netstate_t *netstate)
 {
+    // Update state depending on ENC28J60 status, handle packet reception if connected to network
     if (netstate->state == 0)
     {
+        // Reset and initialize ENC28J60
         netstate->nextPacketPtr = RXSTART_INIT;
         R_REG(netstate->nextPacketPtr);
         if (enc28j60Init(&mem.config.myMac[6]))
@@ -939,16 +984,19 @@ void netLoop(netstate_t *netstate)
     }
     else if (!enc28j60Ready())
     {
+        // ENC28J60 not responding
         netstate->state = 0;
         netstate->retryCount = 0;
     }
     else if (!enc28j60LinkUp())
     {
+        // Network cable disconnected
         netstate->state = 1;
         netstate->retryCount = 0;
     }
     else if (netstate->state == 1)
     {
+        // Network cable connected, so go to next state
         *((uint8_t *)&mem.leaseTime + 1) = 0;
         *((uint8_t *)&mem.leaseTime) = 0;
         netstate->state = 2;
@@ -961,6 +1009,7 @@ void netLoop(netstate_t *netstate)
     else if (enc28j60PacketReceived()) // ToDo: deal with buffer overflow
         receivePacket(netstate);
 
+    // Read lease and sync timer values, starting from most significant bytes to avoid disabling interrupts
     uint16_t *leaseTimePtr = &mem.leaseTime;
     B_REG(leaseTimePtr);
     uint16_t sync;
@@ -976,6 +1025,7 @@ void netLoop(netstate_t *netstate)
 
     if (lease == 0 && netstate->state > 4 && !(flag & (1 << CUSTOM_IP)))
     {
+        // Lease timer expired
 #ifndef __AVR_ATtiny4313__
         tx('L');
         tx('\r');
@@ -988,6 +1038,7 @@ void netLoop(netstate_t *netstate)
     }
     else if (sync == 0 && netstate->state > 6)
     {
+        // Sync timer expired
 #ifndef __AVR_ATtiny4313__
         tx('S');
         tx('\r');
@@ -1001,6 +1052,7 @@ void netLoop(netstate_t *netstate)
 
     if (sync == 0 && netstate->retryCount == 0)
     {
+        // Sync timer expired and resynchronization failed
 #ifndef __AVR_ATtiny4313__
         if (flag & (1 << SYNC_OK))
         {
@@ -1012,17 +1064,21 @@ void netLoop(netstate_t *netstate)
         flag &= ~(1 << SYNC_OK);
     }
 
+    // Don't send packets if not connected to network
     if (netstate->state < 2)
         commonReturn5;
 
     if (!(flag & (1 << ARP_REPLY)))
     {
+        // Don't send packets until timeout expires (except for ARP reply)
         uint8_t retryH = retryTimeH;
         uint8_t retryL = retryTimeL;
         if ((retryL | retryH) || netstate->state > 6)
             commonReturn5;
+
         if (netstate->retryCount)
         {
+            // Decrement retry counter, enter long timeout if it reached zero
             (netstate->retryCount)--;
             if (netstate->retryCount == 0)
             {
@@ -1044,6 +1100,7 @@ void netLoop(netstate_t *netstate)
         }
         else
         {
+            // Long timeout expired, so go to previous state
             if (!(netstate->state & 1))
                 netstate->state--;
             if (!(netstate->state & 4))
@@ -1053,6 +1110,7 @@ void netLoop(netstate_t *netstate)
             tx('F');
 #endif
         }
+
         retryTimeL = RETRY_TIMEOUT_S;
 #ifndef __AVR_ATtiny4313__
         tx(' ');
@@ -1064,12 +1122,15 @@ void netLoop(netstate_t *netstate)
 #endif
     }
 
+    // Send packet according to current state and ARP_REPLY flag
     sendPacket(netstate->state); // ToDo: deal with buffer overflow
     flag &= ~(1 << ARP_REPLY);
 }
 
+// Initialize net module
 void netInit(netstate_t *netstate)
 {
+    // Reset lease time and sync time, check if custom IP is provided, and determine the address for ARP request
     uint8_t arpPtr = memOffset(config.dstIp);
     STATIC_ASSERT(offsetof(mem_t, leaseTime) + sizeof(uint16_t) == offsetof(mem_t, syncTime));
     uint8_t *pt = (uint8_t *)&mem.leaseTime + 4;

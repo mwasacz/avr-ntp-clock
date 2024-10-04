@@ -1,10 +1,3 @@
-/*
- * enc28j60.c
- *
- * Created: 01.07.2018 12:22:00
- *  Author: Mikolaj
- */
-
 #include "enc28j60.h"
 
 #include <avr/io.h>
@@ -26,6 +19,7 @@
 #define SCK_HI  MAIN_PORT |= (1 << SPI_SCK)
 #define SCK_LO  MAIN_PORT &= ~(1 << SPI_SCK)
 
+// Initialization values for ENC28J60 registers
 const __flash uint8_t regInitVal[42] = {
     // Set receive buffer start address
     ENC28J60_WRITE_CTRL_REG | B0_ERXSTL, L(RXSTART_INIT),
@@ -65,16 +59,19 @@ const __flash uint8_t regInitVal[42] = {
     ENC28J60_WRITE_CTRL_REG | B3_ECOCON, 0
 };
 
+// Wait for 12us
 static void __attribute__((noinline)) delay12us()
 {
     __builtin_avr_delay_cycles(F_CPU * 12 / 1000000);
 }
 
+// Wait for 1ms
 static void __attribute__((noinline)) delay1ms()
 {
     __builtin_avr_delay_cycles(F_CPU / 1000 + 1);
 }
 
+// Exchange byte with ENC28J60 via SPI
 uint8_t spiTransfer(uint8_t data)
 {
     uint8_t i = 8;
@@ -92,11 +89,13 @@ uint8_t spiTransfer(uint8_t data)
     return data;
 }
 
+// Exchange byte with ENC28J60 via SPI, sent byte is 0x00 (requires less overhead to call)
 uint8_t spiTransferZero()
 {
     return spiTransfer(0);
 }
 
+// Read ENC28J60 register (opAddr must be a combined operation code and register address)
 static uint8_t enc28j60ReadOp(uint8_t opAddr)
 {
     // Assert CS
@@ -113,6 +112,7 @@ static uint8_t enc28j60ReadOp(uint8_t opAddr)
     return data;
 }
 
+// Read ENC28J60 MAC or MII register (opAddr must be a combined operation code and register address)
 static uint8_t enc28j60ReadOpMacMii(uint8_t opAddr)
 {
     // Assert CS
@@ -131,6 +131,7 @@ static uint8_t enc28j60ReadOpMacMii(uint8_t opAddr)
     return data;
 }
 
+// Write data to ENC28J60 register (opAddr must be a combined operation code and register address)
 static void enc28j60WriteOp(uint8_t opAddr, uint8_t data)
 {
     // Assert CS
@@ -145,24 +146,33 @@ static void enc28j60WriteOp(uint8_t opAddr, uint8_t data)
     CS_HI;
 }
 
+// Write data to a pair of ENC28J60 registers (opAddr must be a combined operation code and register address)
 static void enc28j60WriteOpPair(uint8_t opAddr, uint16_t data)
 {
     enc28j60WriteOp(opAddr, L(data));
     enc28j60WriteOp(opAddr + 1, H(data));
 }
 
+// Read ENC28J60 register
 #define enc28j60Read(address)               enc28j60ReadOp(ENC28J60_READ_CTRL_REG | (address))
+// Read ENC28J60 MAC or MII register
 #define enc28j60ReadMacMii(address)         enc28j60ReadOpMacMii(ENC28J60_READ_CTRL_REG | (address))
+// Write data to ENC28J60 register
 #define enc28j60Write(address, data)        enc28j60WriteOp(ENC28J60_WRITE_CTRL_REG | (address), (data))
+// Set bits in ENC28J60 register
 #define enc28j60BitFieldSet(address, data)  enc28j60WriteOp(ENC28J60_BIT_FIELD_SET | (address), (data))
+// Clear bits in ENC28J60 register
 #define enc28j60BitFieldClr(address, data)  enc28j60WriteOp(ENC28J60_BIT_FIELD_CLR | (address), (data))
+// Write data to a pair of ENC28J60 registers
 #define enc28j60WritePair(address, data)    enc28j60WriteOpPair(ENC28J60_WRITE_CTRL_REG | (address), (data))
 
+// Write data to ENC28J60 ECON1 register (requires less overhead to call)
 static void enc28j60WriteECON1(uint8_t data)
 {
     enc28j60Write(ECON1, data);
 }
 
+// Read low byte of ENC28J60 PHY register
 static uint8_t enc28j60PhyReadL(uint8_t address)
 {
     // Select bank 2
@@ -182,6 +192,7 @@ static uint8_t enc28j60PhyReadL(uint8_t address)
     return enc28j60ReadMacMii(B2_MIRDL);
 }
 
+// Initialize ENC28J60
 uint8_t enc28j60Init(uint8_t *myMac)
 {
     // Exit Power Save mode (rev. B7 Silicon Errata point 19)
@@ -255,6 +266,7 @@ uint8_t enc28j60Init(uint8_t *myMac)
     return 1;
 }
 
+// Check for a received packet (returns a positive value if a packet has been received)
 uint8_t enc28j60PacketReceived()
 {
     // Select bank 1
@@ -265,6 +277,7 @@ uint8_t enc28j60PacketReceived()
     return enc28j60Read(B1_EPKTCNT);
 }
 
+// Start reading the packet and return packet length
 uint16_t enc28j60ReadPacket(uint16_t *nextPacketPtr)
 {
     // Select bank 0
@@ -290,6 +303,7 @@ uint16_t enc28j60ReadPacket(uint16_t *nextPacketPtr)
     return UINT16(lo, hi);
 }
 
+// Finish reading the packet
 void enc28j60EndRead(uint16_t *nextPacketPtr)
 {
     // Release CS
@@ -310,6 +324,7 @@ void enc28j60EndRead(uint16_t *nextPacketPtr)
     enc28j60WritePair(B0_ERXRDPTL, rxPtr);
 }
 
+// Start writing the packet
 void enc28j60WritePacket(uint16_t txnd)
 {
     // Select bank 0
@@ -330,6 +345,7 @@ void enc28j60WritePacket(uint16_t txnd)
     spiTransferZero();
 }
 
+// Finish writing the packet and send it
 void enc28j60EndWrite(uint16_t txnd)
 {
     // Release CS
@@ -361,7 +377,7 @@ void enc28j60EndWrite(uint16_t txnd)
 
         // Cancel previous transmission if stuck
         enc28j60WriteECON1(ECON1_RXEN);
-        
+
         // Set read pointer to byte 3 of Transmit Status Vector
         enc28j60WritePair(B0_ERDPTL, txnd + 4);
 
@@ -370,12 +386,14 @@ void enc28j60EndWrite(uint16_t txnd)
     } while (eir & EIR_TXERIF && status & 0x20 && --attempts);
 }
 
+// Return positive value if ENC28J60 is ready
 uint8_t enc28j60Ready()
 {
     // Verify that packet reception is enabled
     return enc28j60Read(ECON1) & ECON1_RXEN;
 }
 
+// Return positive value if network cable is connected
 uint8_t enc28j60LinkUp()
 {
     // Check if the link is up and has been up since the last call to this function

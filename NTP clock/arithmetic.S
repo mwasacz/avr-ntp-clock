@@ -1,3 +1,4 @@
+; Multiply and add 8-bit values to obtain 16-bit result
 addL = 25
 mul1L = 24
 mul2L = 22
@@ -14,6 +15,7 @@ mulAdd8Packed:
     brne 1b
     ret
 
+; Multiply and add 16-bit values to obtain 32-bit result
 addL = 24
 addH = 25
 mul1L = 22

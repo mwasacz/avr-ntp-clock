@@ -1,15 +1,9 @@
-/*
- * config.h
- *
- * Created: 01.07.2018 11:40:51
- *  Author: Mikolaj
- */
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include <avr/io.h>
 
+// Alternative register names for compatibility
 #ifndef __AVR_ATtiny4313__
 #ifdef __AVR_ATmega16__
 #define EEPE            EEWE
@@ -22,6 +16,7 @@
 #endif
 #endif
 
+// Fuse bit settings
 #ifdef __AVR_ATtiny4313__
 #define LFUSE           FUSE_SUT1
 #define HFUSE           (FUSE_EESAVE & FUSE_SPIEN & FUSE_BODLEVEL1 & FUSE_BODLEVEL0)
@@ -30,6 +25,8 @@
 #define LFUSE           (FUSE_BODLEVEL & FUSE_BODEN & FUSE_SUT1)
 #define HFUSE           (FUSE_SPIEN & FUSE_CKOPT & FUSE_EESAVE & FUSE_BOOTSZ1 & FUSE_BOOTSZ0)
 #endif
+
+// Port configuration and timing constants
 
 #define MAIN_DDR        DDRD
 #define MAIN_PORT       PORTD
@@ -77,6 +74,7 @@
 
 #endif
 
+// Commonly used variables are stored in unused IO registers, so that accessing them takes 2 bytes rather than 4
 #ifdef __AVR_ATtiny4313__
 #define flag            PCMSK2
 #define page            GPIOR0
@@ -88,8 +86,11 @@
 #define dispCnt         TCNT2
 #define debounceCnt     OCR2
 #endif
+
+// Offset of disp within mem
 #define dispOffset      26
 
+// Flags
 #define TIME_OK         0
 #define SYNC_OK         1
 #define BLINK_LED       2
@@ -97,4 +98,4 @@
 #define CUSTOM_IP       4
 #define ARP_REPLY       5
 
-#endif /* CONFIG_H */
+#endif // CONFIG_H

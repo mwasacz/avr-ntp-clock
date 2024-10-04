@@ -1,14 +1,9 @@
-/*
- * arithmetic.h
- *
- * Created: 02.02.2022 14:34:07
- *  Author: Mikolaj
- */
-
 #ifndef ARITHMETIC_H
 #define ARITHMETIC_H
 
 #include <stdint.h>
+
+// Useful type conversion helpers and arithmetic functions
 
 typedef __uint24 uint24_t;
 
@@ -41,7 +36,9 @@ typedef union
 extern uint16_t mulAdd8Packed(uint16_t addMul1, uint8_t mul2);
 extern uint32_t mulAdd16Packed(uint32_t addMul1, uint16_t mul2);
 
+// Multiply and add 8-bit values to obtain 16-bit result
 #define mulAdd8(add, mul1, mul2)    mulAdd8Packed(UINT16(mul1, add), mul2)
+// Multiply and add 16-bit values to obtain 32-bit result
 #define mulAdd16(add, mul1, mul2)   mulAdd16Packed(UINT32(L(mul1), H(mul1), L(add), H(add)), mul2)
 
-#endif /* ARITHMETIC_H_ */
+#endif // ARITHMETIC_H

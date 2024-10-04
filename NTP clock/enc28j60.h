@@ -1,10 +1,3 @@
-/*
- * enc28j60.h
- *
- * Created: 01.07.2018 12:22:14
- *  Author: Mikolaj
- */
-
 #ifndef ENC28J60_H
 #define ENC28J60_H
 
@@ -266,4 +259,4 @@ extern void enc28j60EndWrite(uint16_t txnd);
 extern uint8_t enc28j60Ready();
 extern uint8_t enc28j60LinkUp();
 
-#endif /* ENC28J60_H */
+#endif // ENC28J60_H

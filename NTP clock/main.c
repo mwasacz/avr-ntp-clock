@@ -1,14 +1,3 @@
-/*----------------------------------------------------------------------*
- *  NTP CLOCK                                                           *
- *  with ATtiny4313, ENC28J60 and AVT2632 kit                           *
- *                                                                      *
- *  by Mikolaj Wasacz                                                   *
- *                                                                      *
- *  Microcontroller: AVR ATtiny4313                                     *
- *  Fuse bits: Low:0xDF High:0x9B Ext:0xFF                              *
- *  Clock: 12 MHz Crystal Oscillator                                    *
- *----------------------------------------------------------------------*/
-
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
@@ -17,8 +6,12 @@
 #include "arithmetic.h"
 #include "net.h"
 
+// If commonBranch is used multiple times, the compiler recognizes it as common code
+// This way, multiple relative branch instructions can point to a single relative jump
+// Inserted based on analyzing the disassembly
 #define commonBranch    asm ("")
 
+// Fuse bits for ATtiny4313: Low: 0xDF, High: 0x9B, Ext: 0xFF
 FUSES = {
     .low = LFUSE,
     .high = HFUSE
@@ -28,6 +21,7 @@ FUSES = {
 #endif
 };
 
+// Handle button debouncing, return 0 when debouncing is complete
 static uint8_t debounce()
 {
     uint8_t gifr = (1 << INTF0) | (1 << INTF1);
@@ -44,11 +38,13 @@ static uint8_t debounce()
     return debounceCnt;
 }
 
+// Wait while EEPROM write is in progress
 static void eepromWait()
 {
     while (EECR & (1 << EEPE));
 }
 
+// Read byte from EEPROM at address p
 static uint8_t eepromRead(uint8_t p)
 {
     EEAR = p;
@@ -56,6 +52,7 @@ static uint8_t eepromRead(uint8_t p)
     return EEDR;
 }
 
+// Write byte to EEPROM at address p
 static void eepromWrite(uint8_t p, uint8_t val)
 {
     eepromWait();
@@ -111,6 +108,7 @@ volatile config_t config EEMEM = {
     }
 };
 
+// Main function
 int main()
 {
 #ifdef __AVR_ATtiny4313__
@@ -160,6 +158,8 @@ int main()
     uint8_t p = (1 << SW_1) | (1 << SW_2);
     R_REG(p);
 
+    // Copy configuration data from EEPROM and clear display
+    // Also write some bytes past disp boundary but it's not important as memory is uninitialized anyway
     eepromWait();
     uint8_t c = sizeof(config_t) - 1;
     STATIC_ASSERT(sizeof(disp_t) <= sizeof(config_t));
@@ -176,29 +176,38 @@ int main()
 
     page = p;
 
+    // Main loop
     while (1)
     {
         mem.disp.state = 0;
 
         sei();
 
+        // Initialize net module
         netstate_t netstate;
         netInit(&netstate);
 
+        // Loop until settings menu is entered
         while (1)
         {
             do
             {
+                // Handle network communications
                 netLoop(&netstate);
                 mem.disp.state = netstate.state;
             } while (debounce());
+
+            // Read button states after debouncing
             uint8_t b = MAIN_PIN;
             b &= (1 << SW_1) | (1 << SW_2);
             if (b == 0)
                 break;
+
+            // Update display page
             page = b;
         }
 
+        // Reset manual time input
         datetime_t *initTimePtr = &mem.initTime;
         B_REG(initTimePtr);
         initTimePtr->second = 0;
@@ -214,12 +223,15 @@ int main()
         uint8_t old = 0;
         uint8_t btn = 0;
 
+        // Loop while in the settings menu
         while (1)
         {
             if (btn & (1 << SW_2))
             {
+                // Dummy loop just to allow breaking out of it (this construction results in the smallest code size)
                 do
                 {
+                    // Increment appropriate digit and ensure the value is at most 255
                     if (pos == 1)
                     {
                         dig1++;
@@ -255,6 +267,7 @@ int main()
                     }
                 } while (0);
 
+                // Calculate value from digits
                 uint8_t newVal = mulAdd8(dig2, dig1, 10);
                 newVal = mulAdd8(dig3, newVal, 10);
 
@@ -265,12 +278,14 @@ int main()
 
                 if (pos == 0)
                 {
+                    // Update value in RAM and EEPROM if it's a configuration byte and it's different from current value
                     if (addr >= sizeof(datetime_t) && newVal != *(ptr + 1))
                     {
                         *(ptr + 1) = newVal;
                         eepromWrite(sizeof(config_t) + sizeof(datetime_t) - 1 - addr, newVal);
                     }
 
+                    // Calculate digits for next byte
                     uint8_t val = *ptr;
                     dig3 = val % 10;
                     uint8_t v = val / 10;
@@ -288,10 +303,14 @@ int main()
                     commonBranch;
                 else
                 {
+                    // This is a manual time input byte, so update value in RAM immediately
                     *(ptr + 1) = newVal;
+
                     datetime_t *initTimePtr = &mem.initTime;
                     Y_REG(initTimePtr);
 
+                    // Get total days from previous years, including leap days
+                    // Also add days within this month
                     uint8_t year = initTimePtr->year;
                     uint8_t d = year;
                     d -= 1;
@@ -299,6 +318,7 @@ int main()
                     d += initTimePtr->day;
                     uint16_t td = mulAdd16(d, year, 365);
 
+                    // Add days from previous months within this year
                     uint8_t month = initTimePtr->month;
                     while (1)
                     {
@@ -325,6 +345,7 @@ int main()
                         td += temp;
                     }
 
+                    // Calculate total seconds from days, hours, minutes, and seconds
                     uint16_t tm = mulAdd8(initTimePtr->minute, initTimePtr->hour, 60);
                     uint8_t s = initTimePtr->second;
                     uint16_t t2s = mulAdd16(s >> 1, tm, 30);
@@ -342,6 +363,8 @@ int main()
                         : "+d" (time), "+r" (s)
                         : "M" (L(-SEC_OFFSET >> 8)), "M" (L(-SEC_OFFSET >> 16)), "M" (L(-SEC_OFFSET >> 24))
                     );
+
+                    // Set time
                     resetTimer(time, 0);
                 }
             }
@@ -350,12 +373,14 @@ int main()
             R_REG(p);
             if (btn & (1 << SW_1))
             {
+                // Update current digit indicator
                 pos++;
                 pos &= 3;
             }
             if (pos != 0)
                 p = pos;
 
+            // Update display page 0
             disp_t *dispPtr = &mem.disp;
             B_REG(dispPtr);
             dispPtr->menu[0] = addr % 10;
@@ -366,8 +391,8 @@ int main()
             dispPtr->menu[5] = p;
             page = 0;
 
+            // Debounce and get button states
             while (debounce());
-
             uint8_t new = MAIN_PIN;
             btn = old & ~new;
             old = new;

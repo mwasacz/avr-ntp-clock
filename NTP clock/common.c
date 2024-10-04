@@ -1,10 +1,3 @@
-/*
- * common.c
- *
- * Created: 02.02.2022 14:33:22
- *  Author: Mikolaj
- */
-
 #include "common.h"
 
 #include <avr/io.h>
@@ -14,8 +7,11 @@
 
 mem_t mem __attribute__((section(".noinit")));
 
+// Brightness correction for displays
+// Note: 128 is a special value that disables the display
 const __flash uint8_t brightnessVal[10] = { 128, 4, 12, 25, 45, 71, 104, 145, 195, 255 };
 
+// Set time to timInt and load Timer1 with timFrac
 void resetTimer(uint32_t timInt, uint16_t timFrac)
 {
     uint32_t *timePtr = &mem.time;
@@ -40,6 +36,7 @@ void resetTimer(uint32_t timInt, uint16_t timFrac)
     sei();
 }
 
+// Swap timezone pointers
 static void swapPtr(timezone_t **tz, timezone_t **tzAlt)
 {
     timezone_t *temp = *tz;
@@ -49,10 +46,12 @@ static void swapPtr(timezone_t **tz, timezone_t **tzAlt)
     R_REG(*tzAlt);
 }
 
+// Update time display
 void displayTime(uint32_t time)
 {
     time -= SEC_OFFSET;
 
+    // Split time into seconds and total minutes
     uint8_t second = time % 60;
     uint32_t tmm = time / 60;
 
@@ -65,6 +64,7 @@ void displayTime(uint32_t time)
     R_REG(cmpCnt);
     R_REG(cnt);
 
+    // Compare timezone end dates, swap so that tz ends before tzAlt
     uint8_t *tzAltEndPtr = &mem.config.timezones[1].endMinute + 5;
     uint8_t *tzEndPtr = &mem.config.timezones[0].endMinute + 5;
     while (1)
@@ -87,11 +87,18 @@ void displayTime(uint32_t time)
     }
 
     uint8_t minute, hour, dow, year, month, day, yearAlt;
+
+    // Loop which is repeated at most three times
+    // In iteration 0, we calculate time according to timezone tz, and check if it's before tz end time
+    // In iteration 1, we calculate time according to timezone tzAlt, and check if it's before tzAlt end time
+    // In iteration 2, we calculate time according to timezone tz again
     while (1)
     {
         uint16_t offset = mulAdd8(tz->offsetMinute, tz->offsetHour, 60);
         uint32_t x = tmm;
         R_REG(x);
+
+        // Add or subtract offset
         if (tz->offsetAdd)
             x += offset;
         else
@@ -106,21 +113,25 @@ void displayTime(uint32_t time)
             );
         }
 
+        // Split total minutes into total days and minutes within day
         uint16_t tm = x % (24 * 60);
         uint16_t td = x / (24 * 60);
         R_REG(td);
 
+        // Split minutes within day into minutes and hours
         uint32_t tm32 = tm;
         minute = tm32 % 60;
         hour = tm32 / 60;
         R_REG(minute);
         R_REG(hour);
 
+        // Calculate day of week
         uint32_t td32 = td + 5;
         dow = td32 % 7;
         R_REG(dow);
         dow++;
 
+        // Split total days into year and days within year
         uint32_t t4d;
         asm (
             "movw %A0, %1 \n"
@@ -139,6 +150,7 @@ void displayTime(uint32_t time)
         td = t4d % 1461;
         td >>= 2;
 
+        // Split days within year into months and days
         month = 1;
         uint8_t temp;
         while (1)
@@ -165,6 +177,7 @@ void displayTime(uint32_t time)
         }
         day = td;
 
+        // Calculate week within month, end week and end day of week
         uint8_t d = day;
         uint8_t endWeek = tz->endWeek;
         if (endWeek >= 5)
@@ -173,6 +186,7 @@ void displayTime(uint32_t time)
         d = d + 7 + endDow - dow;
         uint8_t week = d / 7;
 
+        // If current time is less than tz end time, decrement cnt
         uint8_t endMinute = tz->endMinute;
         uint8_t endHour = tz->endHour;
         uint8_t endMonth = tz->endMonth;
@@ -190,9 +204,12 @@ void displayTime(uint32_t time)
             : "r" (minute), "r" (hour), "r" (dow), "r" (week), "r" (month), "r" (year), "r" (endMinute), "r" (endHour),
             "r" (endDow), "r" (endWeek), "r" (endMonth)
         );
+
+        // If cnt has been decremented or this is the third iteration, break the loop
         cnt >>= 1;
         if (cnt & 1)
             break;
+
         swapPtr(&tz, &tzAlt);
     }
 
@@ -202,6 +219,7 @@ void displayTime(uint32_t time)
 
     if (year >= 100)
     {
+        // Years beyond 2099 are not supported, so turn off time and date display
         dispPtr->year[0] = 15;
         dispPtr->year[1] = 15;
         dispPtr->year[2] = 15;
@@ -210,6 +228,7 @@ void displayTime(uint32_t time)
     }
     else
     {
+        // Check if it's daytime or nighttime and set brightness accordingly
         uint8_t level = configPtr->dayBrightness.level;
         asm (
             "cp %4, %6 \n"
@@ -238,6 +257,7 @@ void displayTime(uint32_t time)
         );
         OCR0A = brightnessVal[level];
 
+        // Update display page 3
         dispPtr->second[0] = second % 10;
         dispPtr->second[1] = second / 10;
         dispPtr->minute[0] = minute % 10;
@@ -249,6 +269,7 @@ void displayTime(uint32_t time)
         dispPtr->hour[1] = h;
         dispPtr->dow = dow;
 
+        // Update display page 1
         dispPtr->month[0] = month % 10;
         dispPtr->month[1] = month / 10;
         day++;
@@ -258,6 +279,7 @@ void displayTime(uint32_t time)
             d = 15;
         dispPtr->day[1] = d;
 
+        // Update display page 2
         dispPtr->year[0] = year % 10;
         dispPtr->year[1] = year / 10;
         dispPtr->year[2] = 0;
