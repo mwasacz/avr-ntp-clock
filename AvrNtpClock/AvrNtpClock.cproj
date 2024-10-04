@@ -12,9 +12,9 @@
     <OutputFileName>$(MSBuildProjectName)</OutputFileName>
     <OutputFileExtension>.elf</OutputFileExtension>
     <OutputDirectory>$(MSBuildProjectDirectory)\$(Configuration)</OutputDirectory>
-    <AssemblyName>NTP clock</AssemblyName>
-    <Name>NTP clock</Name>
-    <RootNamespace>NTP clock</RootNamespace>
+    <AssemblyName>AvrNtpClock</AssemblyName>
+    <Name>AvrNtpClock</Name>
+    <RootNamespace>AvrNtpClock</RootNamespace>
     <ToolchainFlavour>Native</ToolchainFlavour>
     <KeepTimersRunning>true</KeepTimersRunning>
     <OverrideVtor>false</OverrideVtor>
