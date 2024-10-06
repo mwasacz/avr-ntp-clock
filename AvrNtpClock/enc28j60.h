@@ -1,3 +1,29 @@
+// This file is part of AVR NTP Clock
+// Copyright (C) 2018-2022 Mikolaj Wasacz
+// SPDX-License-Identifier: GPL-2.0-only
+
+// This file includes code from Tuxgraphics NTP clock by Guido Socher, covered by the following copyright notice:
+
+// Title      : Microchip ENC28J60 Ethernet Interface Driver
+// Author     : Pascal Stang 
+// Modified by: Guido Socher
+// Copyright:LGPL V2
+// See http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html
+// Based on the enc28j60.c file from the AVRlib library by Pascal Stang.
+// For AVRlib See http://www.procyonengineering.com/
+// Used with explicit permission of Pascal Stang.
+
+// This file includes code from Procyon AVRlib by Pascal Stang, covered by the following copyright notice:
+
+// File Name    : 'enc28j60.h'
+// Title        : Microchip ENC28J60 Ethernet Interface Driver
+// Author       : Pascal Stang (c)2005
+// Created      : 9/22/2005
+// Revised      : 9/22/2005
+// Version      : 0.1
+// Target MCU   : Atmel AVR series
+// Editor Tabs  : 4
+
 #ifndef ENC28J60_H
 #define ENC28J60_H
 

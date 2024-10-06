@@ -1,3 +1,7 @@
+// This file is part of AVR NTP Clock
+// Copyright (C) 2018-2022 Mikolaj Wasacz
+// SPDX-License-Identifier: GPL-2.0-only
+
 #include "net.h"
 
 #include <avr/io.h>

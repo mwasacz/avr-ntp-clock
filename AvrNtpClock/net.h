@@ -1,3 +1,31 @@
+// This file is part of AVR NTP Clock
+// Copyright (C) 2018-2022 Mikolaj Wasacz
+// SPDX-License-Identifier: GPL-2.0-only
+
+// This file includes code from Tuxgraphics NTP clock by Guido Socher, covered by the following copyright notice:
+
+// Author: Guido Socher 
+// Copyright:LGPL V2
+// See http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html
+//
+// Based on the net.h file from the AVRlib library by Pascal Stang.
+// For AVRlib See http://www.procyonengineering.com/
+// Used with explicit permission of Pascal Stang.
+
+// This file includes code from Procyon AVRlib by Pascal Stang, covered by the following copyright notice:
+
+// File Name    : 'net.h'
+// Title        : Network support library
+// Author       : Pascal Stang
+// Created      : 8/30/2004
+// Revised      : 7/3/2005
+// Version      : 0.1
+// Target MCU   : Atmel AVR series
+// Editor Tabs  : 4
+//
+//  This code is distributed under the GNU Public License
+//      which can be found at http://www.gnu.org/licenses/gpl.txt
+
 #ifndef NET_H
 #define NET_H
 

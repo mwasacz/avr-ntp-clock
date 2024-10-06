@@ -1,3 +1,7 @@
+; This file is part of AVR NTP Clock
+; Copyright (C) 2018-2022 Mikolaj Wasacz
+; SPDX-License-Identifier: GPL-2.0-only
+
 ; Multiply and add 8-bit values to obtain 16-bit result
 addL = 25
 mul1L = 24
