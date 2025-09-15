@@ -201,10 +201,17 @@ static void copyAddr(uint8_t d, uint8_t s)
 }
 
 // Reset retry timer
-static void __attribute__((noinline)) resetRetryTime()
+static void resetRetryTime()
 {
     retryTimeH = 0;
     retryTimeL = 0;
+}
+
+// Reset retry timer and counter
+static void resetRetry(netstate_t *netstate)
+{
+    resetRetryTime();
+    netstate->retryCount = RETRY_COUNT;
 }
 
 // Convert timer value into 16-bit fraction
@@ -644,15 +651,10 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
         }
     }
 
-    // Dummy loop just to allow breaking out of it (this construction results in the smallest code size)
-    do
+    if (type == 6)
+        netstate->state = 2;
+    else
     {
-        if (type == 6)
-        {
-            netstate->state = 2;
-            break;
-        }
-
         if (invalidAddr) return;
 
         uint8_t arpPtr = memOffset(config.dstIp);
@@ -695,10 +697,9 @@ static void receiveDhcpPacket(uint16_t len, netstate_t *netstate)
         }
 
         copyAddr(memOffset(arpIp), arpPtr);
-    } while (0);
+    }
 
-    resetRetryTime();
-    netstate->retryCount = RETRY_COUNT;
+    resetRetry(netstate);
 }
 
 // Read NTP payload and process it
@@ -905,8 +906,8 @@ static void receiveArpPacket(netstate_t *netstate)
         if (checkAddr(memOffset(arpIp))) return; // Sender protocol address
 
         netstate->state = 6; // ToDo: check target IP, MAC ???
-        resetRetryTime();
-        netstate->retryCount = RETRY_COUNT;
+        R_REG(netstate->state);
+        resetRetry(netstate);
     }
 }
 
@@ -983,20 +984,27 @@ void netLoop(netstate_t *netstate)
         netstate->nextPacketPtr = RXSTART_INIT;
         R_REG(netstate->nextPacketPtr);
         if (enc28j60Init(&mem.config.myMac[6]))
+        {
             netstate->state = 1;
-        netstate->retryCount = 0;
+            R_REG(netstate->state);
+            resetRetry(netstate);
+        }
     }
     else if (!enc28j60Ready())
     {
         // ENC28J60 not responding
         netstate->state = 0;
-        netstate->retryCount = 0;
+        resetRetry(netstate);
     }
     else if (!enc28j60LinkUp())
     {
         // Network cable disconnected
-        netstate->state = 1;
-        netstate->retryCount = 0;
+        if (netstate->state != 1)
+        {
+            netstate->state = 1;
+            R_REG(netstate->state);
+            resetRetry(netstate);
+        }
     }
     else if (netstate->state == 1)
     {
@@ -1007,8 +1015,7 @@ void netLoop(netstate_t *netstate)
         R_REG(netstate->state);
         if (flag & (1 << CUSTOM_IP))
             netstate->state = 5;
-        resetRetryTime();
-        netstate->retryCount = RETRY_COUNT;
+        resetRetry(netstate);
     }
     else if (enc28j60PacketReceived()) // ToDo: deal with buffer overflow
         receivePacket(netstate);
@@ -1037,8 +1044,7 @@ void netLoop(netstate_t *netstate)
 #endif
         netstate->state = 4;
         R_REG(netstate->state);
-        resetRetryTime();
-        netstate->retryCount = RETRY_COUNT;
+        resetRetry(netstate);
     }
     else if (sync == 0 && netstate->state > 6)
     {
@@ -1050,8 +1056,7 @@ void netLoop(netstate_t *netstate)
 #endif
         netstate->state = 5;
         R_REG(netstate->state);
-        resetRetryTime();
-        netstate->retryCount = RETRY_COUNT;
+        resetRetry(netstate);
     }
 
     if (sync == 0 && netstate->retryCount == 0)
@@ -1067,10 +1072,6 @@ void netLoop(netstate_t *netstate)
 #endif
         flag &= ~(1 << SYNC_OK);
     }
-
-    // Don't send packets if not connected to network
-    if (netstate->state < 2)
-        commonReturn5;
 
     if (!(flag & (1 << ARP_REPLY)))
     {
@@ -1105,10 +1106,13 @@ void netLoop(netstate_t *netstate)
         else
         {
             // Long timeout expired, so go to previous state
-            if (!(netstate->state & 1))
+            if (netstate->state)
                 netstate->state--;
             if (!(netstate->state & 4))
-                netstate->state = 2;
+                netstate->state &= 2;
+            R_REG(netstate->state);
+            if (netstate->state == 4 && flag & (1 << CUSTOM_IP))
+                netstate->state = 0;
             netstate->retryCount = RETRY_COUNT - 1;
 #ifndef __AVR_ATtiny4313__
             tx('F');
@@ -1125,6 +1129,10 @@ void netLoop(netstate_t *netstate)
         tx('\n');
 #endif
     }
+
+    // Don't send packets if not connected to network
+    if (netstate->state < 2)
+        commonReturn5;
 
     // Send packet according to current state and ARP_REPLY flag
     sendPacket(netstate->state); // ToDo: deal with buffer overflow
