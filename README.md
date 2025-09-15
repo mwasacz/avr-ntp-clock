@@ -52,7 +52,7 @@ The code also supports ATmega16 which I used for debugging, but I don't have a s
 ## Compilation
 
 Compiled binary is available on the [Releases](https://github.com/mwasacz/avr-ntp-clock/releases) page. The flash usage
-is 4092 bytes (99.9%) when compiled with AVR-GCC version 5.4.0. If you want to compile it yourself, follow the
+is 4078 bytes (99.6%) when compiled with AVR-GCC version 5.4.0. If you want to compile it yourself, follow the
 instructions:
 
 - Windows: open [AvrNtpClock.atsln](AvrNtpClock.atsln) in Microchip Studio 7.0 (formerly Atmel Studio 7.0) and compile

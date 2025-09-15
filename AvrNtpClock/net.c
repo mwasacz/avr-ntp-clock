@@ -1105,14 +1105,8 @@ void netLoop(netstate_t *netstate)
         }
         else
         {
-            // Long timeout expired, so go to previous state
-            if (netstate->state)
-                netstate->state--;
-            if (!(netstate->state & 4))
-                netstate->state &= 2;
-            R_REG(netstate->state);
-            if (netstate->state == 4 && flag & (1 << CUSTOM_IP))
-                netstate->state = 0;
+            // Long timeout expired, so go to initial state
+            netstate->state = 0;
             netstate->retryCount = RETRY_COUNT - 1;
 #ifndef __AVR_ATtiny4313__
             tx('F');

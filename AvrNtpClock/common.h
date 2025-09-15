@@ -152,7 +152,7 @@ STATIC_ASSERT(offsetof(mem_t, disp) == dispOffset);
 #define SEC_OFFSET  3155673600
 
 // Timeout constants
-#define RETRY_COUNT     5
+#define RETRY_COUNT     21
 #define RETRY_TIMEOUT_S 15
 #define RETRY_TIMEOUT_L 900
 #define SYNC_TIMEOUT    3600
